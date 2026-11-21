@@ -3,7 +3,8 @@
 로컬 PC에서 노래·영상을 편집하는 AI 스튜디오 (React + FastAPI + FFmpeg + Demucs + faster-whisper).
 
 > ✅ Step 1 완료: 업로드 → 구간 자르기 · 볼륨 · 페이드 → MP4 / MP3 / WAV 다운로드
-> ✅ Step 2 진행 중: 작업 대기열 · 파형 구간 선택 · **AI 보컬/MR 분리** 완료 → 다음: 믹서
+> ✅ Step 2 완료: 작업 대기열 · 파형 구간 선택 · **AI 보컬/MR 분리** · **믹서**(트랙별 볼륨·싱크·3밴드 EQ, 리미터)
+> 🚧 다음: Step 3 (faster-whisper 자동 자막)
 
 ## 실행 방법
 
@@ -42,7 +43,8 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest -v
 ```
 
-- 테스트용 음원·영상은 FFmpeg로 즉석 생성하며, 볼륨/페이드는 `volumedetect`로 실제 음량을 측정해 검증한다.
+- 테스트용 음원·영상은 FFmpeg로 즉석 생성하며, 볼륨·페이드·싱크·EQ·리미터는 `volumedetect`로 실제 음량을 측정해 검증한다.
+  - 구간 측정은 `-ss/-t` 대신 `atrim` 필터를 쓴다 (`-ss/-t`는 약 0.09초 덩어리 단위라 짧은 구간 측정이 부정확했음).
 - 보컬 분리는 같은 통신 규칙(JSON 줄)을 쓰는 **가짜 실행기**로 검사한다 → torch 없이도, 몇 초 안에 테스트가 끝난다.
 
 ## 설계 메모

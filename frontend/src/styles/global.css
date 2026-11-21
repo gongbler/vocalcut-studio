@@ -83,6 +83,25 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .track-tabs .chip { background: var(--panel); font-weight: 600; }
 .track-tabs .chip.on { background: #7c5cff33; }
 
+/* 믹서 */
+.tracks { display: grid; gap: 10px; margin-bottom: 12px; }
+.track-strip {
+  border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+  background: #0b0d11; transition: opacity 0.15s;
+}
+.track-strip.muted { opacity: 0.5; }
+.track-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+.strip-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px 16px; margin-top: 10px; font-size: 13px; color: var(--muted);
+}
+.strip-grid b { color: var(--text); font-weight: 600; }
+.slider { display: grid; gap: 4px; }
+.sync { display: grid; gap: 4px; grid-column: 1 / -1; } /* 싱크 조절은 한 줄 전체를 쓴다 */
+.nudge input { width: 80px; flex: 0 0 auto; }
+button.danger { background: #ff5c7a33; color: var(--bad); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+
 /* 파형 */
 .waveform { margin-bottom: 16px; min-width: 0; }
 .waveform-canvas {

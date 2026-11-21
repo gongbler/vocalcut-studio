@@ -21,6 +21,8 @@ from app.services.engines.base import (
     MediaEngine,
     MediaInfo,
     MediaProbeError,
+    MixSpec,
+    MixTrack,
     OnProgress,
     Peaks,
     RenderError,
@@ -29,6 +31,7 @@ from app.services.engines.base import (
 
 PROBE_TIMEOUT_SEC = 30
 PEAKS_SAMPLE_RATE = 8000  # 파형 계산용으로 소리를 이 정도로만 풀어 받는다
+MIX_SAMPLE_RATE = 44100   # 믹스할 때 모든 트랙을 이 샘플레이트로 맞춘다
 RENDER_TIMEOUT_SEC = 60 * 60  # 긴 영상도 저사양 PC에서 끝낼 수 있게 넉넉히 1시간
 
 # 출력 확장자별 인코딩 설정
@@ -143,6 +146,12 @@ class FFmpegEngine(MediaEngine):
 
         if on_progress:
             on_progress(1.0)
+
+    # ------------------------------------------------------------------
+    def render_mix(self, dst: Path, spec: MixSpec, on_progress: OnProgress | None = None) -> None:
+        cmd = build_mix_command(self.ffmpeg, Path(dst), spec)
+        end = spec.end_sec if spec.end_sec is not None else spec.mix_length
+        self._run_with_progress(cmd, Path(dst), total_sec=end - spec.start_sec, on_progress=on_progress)
 
     # ------------------------------------------------------------------
     def extract_peaks(self, path: Path, peaks_per_sec: float) -> Peaks:
@@ -283,6 +292,68 @@ def build_edit_command(
         raise RenderError(f"지원하지 않는 출력 형식입니다: {out_ext}")
 
     cmd.append(str(dst))
+    return cmd
+
+
+def _track_chain(index: int, t: MixTrack) -> str:
+    """트랙 하나에 적용할 필터 줄: [입력] → 형식 통일 → 싱크 → EQ → 볼륨 → [t0]"""
+    f = [
+        f"[{index}:a:0]aresample={MIX_SAMPLE_RATE}",
+        # 모노/스테레오, 샘플 형식이 제각각이어도 섞을 수 있게 똑같이 맞춘다
+        "aformat=sample_fmts=fltp:channel_layouts=stereo",
+    ]
+    if t.offset_sec > 0:    # 밀기: 앞에 무음을 붙인다 (adelay 단위는 ms, all=1 → 모든 채널에)
+        f.append(f"adelay={round(t.offset_sec * 1000)}:all=1")
+    elif t.offset_sec < 0:  # 당기기: 앞부분을 잘라내고 시간을 0부터 다시 센다
+        f += [f"atrim=start={-t.offset_sec:.3f}", "asetpts=PTS-STARTPTS"]
+    if t.eq_low_db:
+        f.append(f"bass=g={t.eq_low_db:g}:f=100")                    # 저음 선반(shelf) 필터
+    if t.eq_mid_db:
+        f.append(f"equalizer=f=1000:t=q:w=1:g={t.eq_mid_db:g}")      # 1kHz 중심 종 모양(peak) 필터
+    if t.eq_high_db:
+        f.append(f"treble=g={t.eq_high_db:g}:f=8000")                # 고음 선반 필터
+    if t.volume_db:
+        f.append(f"volume={t.volume_db:g}dB")
+    return ",".join(f) + f"[t{index}]"
+
+
+def build_mix_command(ffmpeg: str, dst: Path, spec: MixSpec) -> list[str]:
+    """믹스 주문서를 FFmpeg filter_complex(필터 연결도)로 번역한다.
+
+      [0] 보컬 ─ 싱크 ─ EQ ─ 볼륨 ─┐
+      [1] MR   ─ 싱크 ─ EQ ─ 볼륨 ─┼─ amix(더하기) ─ 구간 자르기 ─ 페이드 ─ 리미터 ─ [out]
+      [2] 내목소리 ─ ...         ─┘
+    """
+    if not spec.tracks:
+        raise RenderError("섞을 트랙이 없습니다.")
+    out_ext = dst.suffix.lower()
+    if out_ext not in _AUDIO_CODECS:
+        raise RenderError(f"믹스는 MP3/WAV로만 내보낼 수 있습니다: {out_ext}")
+
+    end = spec.end_sec if spec.end_sec is not None else spec.mix_length
+    length = end - spec.start_sec
+
+    cmd = [ffmpeg, "-y", "-nostdin", "-v", "error"]
+    for t in spec.tracks:
+        cmd += ["-i", str(t.path)]
+
+    chains = [_track_chain(i, t) for i, t in enumerate(spec.tracks)]
+    labels = "".join(f"[t{i}]" for i in range(len(spec.tracks)))
+    # normalize=0: 트랙 수로 나누지 않고 '그대로 더한다' → 설정한 볼륨이 그대로 유지됨
+    mixer = f"amix=inputs={len(spec.tracks)}:duration=longest:normalize=0"
+
+    master = [f"atrim=start={spec.start_sec:.3f}:end={end:.3f}", "asetpts=PTS-STARTPTS"]
+    if spec.fade_in_sec > 0:
+        master.append(f"afade=t=in:st=0:d={spec.fade_in_sec:g}")
+    if spec.fade_out_sec > 0:
+        master.append(f"afade=t=out:st={max(length - spec.fade_out_sec, 0):.3f}:d={spec.fade_out_sec:g}")
+    if spec.limiter:
+        # -1dBFS(≈0.891) 넘는 소리를 순간적으로 눌러 '찢어지는 소리(클리핑)'를 막는다
+        # level=disabled: 전체 음량을 임의로 키우지 않음 / latency=1: 리미터가 만드는 미세한 지연 보정
+        master.append("alimiter=limit=0.891:level=disabled:latency=1")
+
+    graph = ";".join(chains) + f";{labels}{mixer}," + ",".join(master) + "[out]"
+    cmd += ["-filter_complex", graph, "-map", "[out]", *_AUDIO_CODECS[out_ext], str(dst)]
     return cmd
 
 

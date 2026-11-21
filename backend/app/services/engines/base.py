@@ -64,6 +64,38 @@ class EditSpec:
 
 
 @dataclass(frozen=True)
+class MixTrack:
+    """믹스에 들어갈 트랙 하나의 설정."""
+    path: Path
+    duration_sec: float
+    volume_db: float = 0.0
+    offset_sec: float = 0.0   # 싱크: +0.2 = 0.2초 늦게 시작(밀기), -0.2 = 앞 0.2초를 잘라 당기기
+    eq_low_db: float = 0.0    # 저음 (약 100Hz 아래)
+    eq_mid_db: float = 0.0    # 중음 (약 1kHz 부근, 목소리의 몸통)
+    eq_high_db: float = 0.0   # 고음 (약 8kHz 위, 숨소리·선명함)
+
+    @property
+    def end_sec(self) -> float:
+        """믹스 타임라인에서 이 트랙이 끝나는 시점."""
+        return max(self.offset_sec + self.duration_sec, 0.0)
+
+
+@dataclass(frozen=True)
+class MixSpec:
+    """'이 트랙들을 이렇게 섞어 주세요' 주문서."""
+    tracks: tuple[MixTrack, ...]
+    start_sec: float = 0.0          # 결과물로 내보낼 구간 (미리듣기는 짧은 구간만)
+    end_sec: float | None = None    # None = 가장 긴 트랙의 끝까지
+    fade_in_sec: float = 0.0        # 전체 믹스의 페이드 인/아웃
+    fade_out_sec: float = 0.0
+    limiter: bool = True            # 여러 트랙을 더하면 소리가 커져 깨질 수 있음 → 자동으로 눌러줌
+
+    @property
+    def mix_length(self) -> float:
+        return max((t.end_sec for t in self.tracks), default=0.0)
+
+
+@dataclass(frozen=True)
 class Peaks:
     """파형을 그리기 위한 요약 데이터.
 
@@ -132,6 +164,10 @@ class MediaEngine(ABC):
     @abstractmethod
     def extract_peaks(self, path: Path, peaks_per_sec: float) -> Peaks:
         """오디오의 파형 요약(Peaks)을 계산한다. 영상이면 소리 트랙을 사용한다."""
+
+    @abstractmethod
+    def render_mix(self, dst: Path, spec: MixSpec, on_progress: OnProgress | None = None) -> None:
+        """여러 오디오 트랙을 spec 대로 섞어 dst 에 저장한다 (.mp3 / .wav)."""
 
 
 # ---------- 보컬/MR 분리 엔진 규격서 ----------

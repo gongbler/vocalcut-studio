@@ -4,6 +4,7 @@ import type { MediaFile } from "./api/files";
 import EditPanel from "./features/editor/EditPanel";
 import ResultCard from "./features/editor/ResultCard";
 import ServerStatus from "./features/health/ServerStatus";
+import MixerPanel from "./features/mixer/MixerPanel";
 import SeparationPanel, { type Stems } from "./features/separation/SeparationPanel";
 import TrackTabs from "./features/tracks/TrackTabs";
 import MediaInfoCard from "./features/upload/MediaInfoCard";
@@ -49,6 +50,15 @@ export default function App() {
           <EditPanel key={`edit-${active.id}`} media={active} playerRef={playerRef} onRendered={setOutput} />
           {source.audio && (
             <SeparationPanel key={`sep-${source.id}`} source={source} stems={stems} onSeparated={onSeparated} />
+          )}
+          {source.audio && (
+            // 분리가 끝나면 key 가 바뀌어 믹서가 'MR + 원곡 보컬' 구성으로 새로 시작한다
+            <MixerPanel
+              key={`mix-${source.id}-${stems?.vocals.id ?? "none"}`}
+              source={source}
+              stems={stems}
+              onRendered={setOutput}
+            />
           )}
         </>
       )}
