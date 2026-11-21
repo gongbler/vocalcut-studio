@@ -12,3 +12,6 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 # 업로드/임시/결과 파일이 저장될 작업 폴더 (git에는 올라가지 않음)
 WORKSPACE_DIR = BACKEND_DIR / "workspace"
+
+# 사용할 엔진 이름. 엔진을 교체할 때는 이 값만 바꾼다.
+MEDIA_ENGINE = "ffmpeg"

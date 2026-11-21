@@ -1,0 +1,76 @@
+"""엔진 '규격서(인터페이스)'.
+
+서비스 계층은 이 파일에 정의된 타입과 메서드만 알고 있다.
+FFmpeg든, 나중에 바꿀 다른 엔진이든 이 규격만 지키면 그대로 끼워 쓸 수 있다.
+"""
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from pathlib import Path
+
+
+# ---------- 결과 데이터 (엔진 종류와 상관없이 같은 모양) ----------
+
+@dataclass(frozen=True)
+class VideoStreamInfo:
+    codec: str
+    width: int
+    height: int
+    fps: float | None
+
+
+@dataclass(frozen=True)
+class AudioStreamInfo:
+    codec: str
+    sample_rate: int
+    channels: int
+
+
+@dataclass(frozen=True)
+class MediaInfo:
+    """미디어 파일 한 개의 기본 정보."""
+    path: Path
+    format_name: str
+    duration_sec: float
+    size_bytes: int
+    video: VideoStreamInfo | None  # 영상 트랙이 없으면 None (예: mp3)
+    audio: AudioStreamInfo | None  # 오디오 트랙이 없으면 None (예: 무음 영상)
+
+    @property
+    def has_video(self) -> bool:
+        return self.video is not None
+
+    @property
+    def has_audio(self) -> bool:
+        return self.audio is not None
+
+
+# ---------- 에러 (엔진 종류와 상관없이 같은 종류) ----------
+
+class EngineError(Exception):
+    """엔진 작업 중 발생한 모든 에러의 부모."""
+
+
+class EngineNotAvailableError(EngineError):
+    """엔진 프로그램이 설치되어 있지 않거나 찾을 수 없음."""
+
+
+class MediaProbeError(EngineError):
+    """파일을 분석할 수 없음 (없는 파일, 깨진 파일, 미디어가 아닌 파일 등)."""
+
+
+# ---------- 규격서 ----------
+
+class MediaEngine(ABC):
+    """영상/오디오 처리 엔진이 반드시 갖춰야 할 기능 목록.
+
+    Step 1이 진행되면서 trim(), apply_audio_filters() 등이 여기에 추가된다.
+    """
+
+    #: 엔진 이름 (로그·화면 표시용)
+    name: str
+
+    @abstractmethod
+    def probe(self, path: Path) -> MediaInfo:
+        """파일을 분석해 길이·포맷·트랙 정보를 돌려준다."""
