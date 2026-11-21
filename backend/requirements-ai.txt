@@ -1,0 +1,12 @@
+# AI 엔진(보컬 분리) 패키지 — 서버 자체에는 필요 없고, 별도 프로세스(demucs_runner)에서만 사용
+#
+# 설치 (backend 폴더에서, CPU 전용 PyTorch):
+#   .\.venv\Scripts\python.exe -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+#   .\.venv\Scripts\python.exe -m pip install -r requirements-ai.txt
+#
+# NVIDIA GPU가 있는 PC라면 첫 줄의 '/whl/cpu' 대신 CUDA 버전 주소를 쓴다 (Phase 3 GPU 지원 시 정리).
+# 아래 버전은 이 프로젝트에서 실제로 동작을 확인한 조합이다 (2026-11, Windows 10 · Python 3.11).
+torch==2.15.0
+torchaudio==2.11.1
+demucs==4.1.0
+numpy==2.4.6
