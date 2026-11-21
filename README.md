@@ -35,6 +35,15 @@ cd backend
 
 모델(`htdemucs`, 약 81MB)은 처음 분리할 때 `backend/models/`에 자동으로 받고, 이후에는 인터넷 없이 동작한다.
 
+### (선택) AI 자동 자막 설치
+
+PyTorch 없이 동작한다 (CTranslate2 엔진). 모델(small 약 460MB)은 처음 쓸 때 `backend/models/`에 받는다.
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m pip install -r requirements-asr.txt
+```
+
 ## 테스트
 
 ```powershell
@@ -60,6 +69,18 @@ cd backend
 - 작업 대기열(작업자 1명)로 무거운 작업이 동시에 돌지 않게 하고, 취소 시 1~2초 안에 실행기 프로세스를 종료한다.
 - 처리 속도: i5-4200M(CPU) 기준 곡 길이의 약 2.5~3.4배.
 
+### 자동 자막: 모델 크기 실측 (i5-4200M, RAM 4GB, CPU int8)
+
+| 모델 | 최대 메모리 | 받아쓰기 속도 (곡 길이 대비) | 한국어 글자 오류율 (음성 / 음성+반주) |
+|---|---|---|---|
+| tiny | 250MB | 0.15~0.4배 | 6.1% / 8.7% |
+| base | 325MB | 0.25~0.35배 | 5.2% / 2.6% |
+| small | 580~710MB | 0.45~0.8배 | **0.9% / 1.7%** |
+
+- 측정 도구: `backend/tools/bench_transcription.py` (한국어는 정답을 아는 합성 음성으로 측정).
+- 반주만 있는 구간에서 VAD(무음 건너뛰기)를 끄면 없는 가사("고맙습니다")를 지어냈다 → **VAD 기본 켜기**.
+- 노래(영어 보컬 60초)에서 small 은 첫 줄을 빠뜨리는 경우가 있었다 → 사람이 고치는 편집기(3-3)를 전제로 한다.
+
 ### 엔진 교체 구조 (상용화 대비)
 
 `backend/app/services/engines/base.py`의 규격(`MediaEngine`, `SeparatorEngine`)만 지키면 엔진을 바꿔 끼울 수 있다.
@@ -69,6 +90,7 @@ cd backend
 
 - Demucs **코드**는 MIT 라이선스.
 - 사전학습 **모델 가중치**는 연구용 데이터셋으로 학습되었으므로, 유료 판매 전에 상업 이용이 가능한 모델로 교체를 검토해야 한다.
+- faster-whisper 코드와 Whisper 모델 가중치는 MIT 라이선스 (상업 이용 가능).
 - FFmpeg full build는 GPL 구성 요소를 포함한다 → 배포 시 LGPL 빌드 또는 대체 엔진 검토 필요.
 
 ## 구조
@@ -76,7 +98,7 @@ cd backend
 ```
 frontend/   React + Vite + TypeScript (화면)
 backend/    FastAPI (API 서버, 작업 큐, 엔진 서비스 계층)
-  app/services/engines/   엔진 규격(base) + FFmpeg 엔진 + Demucs 엔진/실행기
-  tools/                  성능 측정 도구 (bench_separation.py)
+  app/services/engines/   엔진 규격(base) + FFmpeg 엔진 + Demucs·Whisper 실행기
+  tools/                  성능 측정 도구 (bench_separation.py, bench_transcription.py)
 scripts/    설치·실행 스크립트
 ```

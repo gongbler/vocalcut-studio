@@ -1,0 +1,10 @@
+# AI 엔진(자막 받아쓰기) 패키지 — 서버 자체에는 필요 없고, 별도 프로세스(whisper_runner)에서만 사용
+#
+# 설치 (backend 폴더에서):
+#   .\.venv\Scripts\python.exe -m pip install -r requirements-asr.txt
+#
+# PyTorch 가 필요 없다 (CTranslate2 엔진 사용) → 보컬 분리(requirements-ai.txt)와 따로 설치할 수 있다.
+# 아래 버전은 이 프로젝트에서 실제로 동작을 확인한 조합이다 (2026-11, Windows 10 · Python 3.11).
+faster-whisper==1.2.1
+ctranslate2==4.9.0
+onnxruntime==1.32.0

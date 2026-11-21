@@ -25,7 +25,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import sys
@@ -34,52 +33,18 @@ import time
 import wave
 from pathlib import Path
 
+from app.services.engines.runner_utils import emit, peak_memory_mb  # 공통 도구
+
 SAMPLE_RATE = 44100  # Demucs 모델이 학습된 샘플레이트
 CHANNELS = 2
 
 _progress_state = {"chunk": 0, "chunks": 1}
 
 
-def emit(**data) -> None:
-    print(json.dumps(data, ensure_ascii=False), flush=True)
-
-
 def emit_progress(inner: float) -> None:
     """전체 진행률 = (끝난 조각 수 + 지금 조각의 진행률) / 전체 조각 수"""
     s = _progress_state
     emit(event="progress", value=round((s["chunk"] + inner) / s["chunks"], 4))
-
-
-def peak_memory_mb() -> float:
-    """이 프로세스가 지금까지 사용한 '최대' 메모리(MB)."""
-    if sys.platform == "win32":
-        import ctypes
-        from ctypes import wintypes
-
-        class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
-            _fields_ = [
-                ("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
-                ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
-                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
-                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
-                ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t),
-            ]
-
-        # 함수의 인자/반환 '자료형'을 꼭 알려줘야 한다.
-        # 안 그러면 ctypes 가 64비트 핸들을 32비트 정수로 잘라 보내서 호출이 조용히 실패한다 (→ 0MB 로 보임)
-        get_current = ctypes.windll.kernel32.GetCurrentProcess
-        get_current.restype = wintypes.HANDLE
-        get_info = ctypes.windll.psapi.GetProcessMemoryInfo
-        get_info.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESS_MEMORY_COUNTERS), wintypes.DWORD]
-        get_info.restype = wintypes.BOOL
-
-        counters = PROCESS_MEMORY_COUNTERS()
-        counters.cb = ctypes.sizeof(counters)
-        if not get_info(get_current(), ctypes.byref(counters), counters.cb):
-            return -1.0  # 측정 실패를 0과 구분
-        return counters.PeakWorkingSetSize / 1024**2
-    import resource
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # Linux: KB 단위
 
 
 def decode_to_raw(src: Path, dst: Path, ffmpeg: str) -> None:
