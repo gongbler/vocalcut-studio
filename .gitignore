@@ -1,0 +1,30 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# --- Node / Frontend ---
+node_modules/
+dist/
+*.log
+
+# --- 런타임 작업 파일 (업로드/임시/결과물은 저장소에 올리지 않음) ---
+backend/workspace/
+
+# --- AI 모델 가중치 (용량이 크므로 제외) ---
+models/
+*.pt
+*.th
+*.bin
+
+# --- 환경 설정 / 비밀값 ---
+.env
+.env.*
+
+# --- OS / 에디터 ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,18 @@
+// 백엔드와 통신하는 함수들을 모아두는 곳.
+// 화면 컴포넌트는 fetch 를 직접 쓰지 않고 여기 함수만 부른다.
+
+export type HealthResponse = {
+  status: string;
+  app: string;
+  version: string;
+  python: string;
+  ffmpeg: { available: boolean; path: string | null };
+};
+
+export async function getHealth(): Promise<HealthResponse> {
+  const res = await fetch("/api/health");
+  if (!res.ok) {
+    throw new Error(`서버 응답 오류: HTTP ${res.status}`);
+  }
+  return res.json();
+}

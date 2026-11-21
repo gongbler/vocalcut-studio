@@ -1,0 +1,4 @@
+# Step 0: 서버 뼈대에 필요한 최소 패키지만 설치한다.
+# (AI 패키지는 RAM 4GB 환경을 고려해 필요한 Step에서 하나씩 추가)
+fastapi>=0.115
+uvicorn[standard]>=0.30
