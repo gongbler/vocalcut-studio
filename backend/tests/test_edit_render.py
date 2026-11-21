@@ -16,11 +16,15 @@ from tests.conftest import FFMPEG, requires_ffmpeg
 
 
 def max_volume_db(path: Path, start: float = 0.0, length: float | None = None) -> float:
-    """파일(또는 일부 구간)에서 가장 큰 소리의 크기(dB)를 측정한다."""
-    cmd = [FFMPEG, "-nostdin", "-ss", str(start), "-i", str(path)]
-    if length:
-        cmd += ["-t", str(length)]
-    cmd += ["-af", "volumedetect", "-f", "null", "-"]
+    """파일(또는 일부 구간)에서 가장 큰 소리의 크기(dB)를 측정한다.
+
+    ⚠️ 구간은 -ss/-t 가 아니라 atrim 필터로 자른다.
+    -ss/-t 는 소리를 '덩어리(프레임, WAV는 약 0.09초)' 단위로 다뤄서, 짧은 구간을 재면
+    경계 밖의 소리까지 섞여 측정된다 (실제로 무음 구간을 -9dB로 잘못 잰 적이 있음).
+    atrim 은 샘플 하나 단위로 정확히 자른다.
+    """
+    trim = f"atrim=start={start}" + (f":duration={length}" if length else "") + ","
+    cmd = [FFMPEG, "-nostdin", "-i", str(path), "-af", trim + "volumedetect", "-f", "null", "-"]
     err = subprocess.run(cmd, capture_output=True, check=True).stderr.decode("utf-8", "replace")
     m = re.search(r"max_volume: (-?[\d.]+|-inf) dB", err)
     return float("-inf") if m.group(1) == "-inf" else float(m.group(1))
@@ -102,10 +106,12 @@ def test_fade_in_starts_silent(sine_wav, tmp_path):
     # 대조군: 페이드 없는 원본은 시작 부분도 중간과 크기가 같다
     assert max_volume_db(sine_wav, 0, 0.05) == pytest.approx(max_volume_db(sine_wav, 1.2, 0.2), abs=1)
 
-    # 페이드 인 결과물은 시작 0.05초가 중간보다 확실히(10dB 이상) 조용해야 한다
+    # 1초 페이드 인에서 0.05초 시점의 크기는 5% → 이론상 약 -26dB.
+    # (예전엔 측정 도구가 0.09초 덩어리 단위로 재서 -15dB 정도로 나왔고, 그래서 기준을 10dB로 낮췄었다.
+    #  측정을 atrim 으로 고친 뒤 원래 의도대로 20dB 기준으로 되돌림)
     first_50ms = max_volume_db(out, start=0, length=0.05)
     middle = max_volume_db(out, start=1.2, length=0.2)
-    assert first_50ms < middle - 10
+    assert first_50ms < middle - 20
 
 
 @requires_ffmpeg
