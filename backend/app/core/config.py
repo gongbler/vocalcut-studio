@@ -15,3 +15,11 @@ WORKSPACE_DIR = BACKEND_DIR / "workspace"
 
 # 사용할 엔진 이름. 엔진을 교체할 때는 이 값만 바꾼다.
 MEDIA_ENGINE = "ffmpeg"
+
+# 업로드 허용 확장자 (소문자, 점 포함)
+ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
+ALLOWED_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}
+ALLOWED_EXTS = ALLOWED_VIDEO_EXTS | ALLOWED_AUDIO_EXTS
+
+# 업로드 최대 크기: 2GB
+MAX_UPLOAD_BYTES = 2 * 1024**3
