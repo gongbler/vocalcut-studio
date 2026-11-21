@@ -63,6 +63,18 @@ class EditSpec:
     fade_out_sec: float = 0.0
 
 
+@dataclass(frozen=True)
+class Peaks:
+    """파형을 그리기 위한 요약 데이터.
+
+    소리 전체(1초에 44,100개 숫자)를 보내는 대신, 짧은 구간마다 '가장 큰 소리 크기' 하나씩만 남긴다.
+    values[i] = i번째 구간의 최대 크기 (0.0 = 무음 ~ 1.0 = 최대)
+    """
+    duration_sec: float
+    peaks_per_sec: float
+    values: list[float]
+
+
 # ---------- 에러 (엔진 종류와 상관없이 같은 종류) ----------
 
 class EngineError(Exception):
@@ -108,3 +120,7 @@ class MediaEngine(ABC):
         spec 값이 올바른지는 호출하는 쪽(서비스)이 미리 검사한다.
         on_progress 가 주어지면 진행률(0.0~1.0)을 수시로 알려준다.
         """
+
+    @abstractmethod
+    def extract_peaks(self, path: Path, peaks_per_sec: float) -> Peaks:
+        """오디오의 파형 요약(Peaks)을 계산한다. 영상이면 소리 트랙을 사용한다."""

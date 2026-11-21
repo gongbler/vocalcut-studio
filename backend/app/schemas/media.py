@@ -24,6 +24,12 @@ class AudioStreamOut(BaseModel):
     channels: int
 
 
+class PeaksOut(BaseModel):
+    duration_sec: float
+    peaks_per_sec: float
+    values: list[float]  # 0.0(무음) ~ 1.0(최대)
+
+
 class MediaFileOut(BaseModel):
     id: str
     original_name: str

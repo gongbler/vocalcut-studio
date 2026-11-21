@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.api.deps import get_engine, get_workspace
-from app.schemas.media import MediaFileOut
+from app.schemas.media import MediaFileOut, PeaksOut
 from app.services import media_service
 from app.services.engines.base import EngineNotAvailableError, MediaEngine, MediaProbeError
 from app.storage.workspace import FileTooLargeError, Workspace
@@ -49,6 +49,22 @@ def get_file(
     except media_service.MediaNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return MediaFileOut.from_media(media)
+
+
+@router.get("/{file_id}/peaks", response_model=PeaksOut)
+def get_file_peaks(
+    file_id: str,
+    ws: Workspace = Depends(get_workspace),
+    engine: MediaEngine = Depends(get_engine),
+) -> PeaksOut:
+    """파형 그리기용 요약 데이터. 브라우저가 노래 전체를 해석하지 않아도 되게 서버가 미리 계산한다."""
+    try:
+        peaks = media_service.get_peaks(ws, engine, file_id)
+    except media_service.MediaNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except MediaProbeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return PeaksOut(duration_sec=peaks.duration_sec, peaks_per_sec=peaks.peaks_per_sec, values=peaks.values)
 
 
 @router.get("/{file_id}/content")

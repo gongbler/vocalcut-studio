@@ -6,13 +6,14 @@
 """
 from __future__ import annotations
 
+import json
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import BinaryIO
 
 from app.core import config
-from app.services.engines.base import MediaEngine, MediaInfo, MediaProbeError
+from app.services.engines.base import MediaEngine, MediaInfo, MediaProbeError, Peaks
 from app.storage.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,29 @@ def import_upload(
 
     ws.write_meta(upload_dir, {"original_name": filename, "stored_name": dest.name})
     return MediaFile(id=file_id, original_name=filename, path=dest, info=info)
+
+
+MAX_PEAKS_PER_SEC = 50     # 1초에 50개 = 0.02초 단위 → 노래 편집에 충분히 세밀함
+MAX_TOTAL_PEAKS = 30_000   # 아주 긴 파일도 응답이 수백 KB를 넘지 않도록 상한
+PEAKS_CACHE_NAME = "peaks.json"
+
+
+def get_peaks(ws: Workspace, engine: MediaEngine, file_id: str) -> Peaks:
+    """파형 데이터. 처음 한 번만 계산하고 파일로 저장해 두었다가(캐시) 다음부터는 바로 돌려준다."""
+    media = get_media(ws, engine, file_id)
+    if not media.info.has_audio:
+        raise MediaProbeError("소리 트랙이 없는 파일이라 파형을 그릴 수 없습니다.")
+
+    cache = media.path.parent / PEAKS_CACHE_NAME
+    if cache.is_file():
+        data = json.loads(cache.read_text(encoding="utf-8"))
+        return Peaks(**data)
+
+    duration = max(media.info.duration_sec, 0.001)
+    peaks_per_sec = min(MAX_PEAKS_PER_SEC, MAX_TOTAL_PEAKS / duration)
+    peaks = engine.extract_peaks(media.path, peaks_per_sec)
+    cache.write_text(json.dumps(asdict(peaks)), encoding="utf-8")
+    return peaks
 
 
 def get_media(ws: Workspace, engine: MediaEngine, file_id: str) -> MediaFile:

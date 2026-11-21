@@ -3,6 +3,7 @@ import { createEdit, getOutput, type EditOutput, type OutputFormat } from "../..
 import type { MediaFile } from "../../api/files";
 import { waitForJob, type Job } from "../../api/jobs";
 import JobProgress from "../../components/JobProgress";
+import Waveform from "../waveform/Waveform";
 import { formatDuration } from "../../utils/format";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 };
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const FORMAT_INFO: Record<OutputFormat, { label: string; hint: string }> = {
   mp4: { label: "MP4 영상", hint: "영상 + 소리 (H.264 / AAC)" },
@@ -112,6 +114,19 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
   return (
     <section className="card">
       <h2>✂️ 자르기 · 볼륨 · 페이드</h2>
+
+      {media.audio && (
+        <Waveform
+          fileId={media.id}
+          playerRef={playerRef}
+          start={start}
+          end={end}
+          onRangeChange={(s, e) => {
+            setStart(round2(s));
+            setEnd(round2(e));
+          }}
+        />
+      )}
 
       <div className="field-grid">
         <label>

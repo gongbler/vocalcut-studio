@@ -75,6 +75,14 @@ input[type="number"] {
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 .result { border-color: #3ecf8e66; }
 .job-progress { margin-top: 12px; font-size: 14px; }
+
+/* 파형 */
+.waveform { margin-bottom: 16px; }
+.waveform-canvas {
+  background: #0b0d11; border: 1px solid var(--border); border-radius: 8px;
+  min-height: 98px; overflow: hidden;
+}
+.waveform .hint { margin-top: 6px; }
 .space-between { justify-content: space-between; }
 
 /* 출력 형식 선택 (라디오 버튼을 칩 모양으로) */

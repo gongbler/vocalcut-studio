@@ -8,8 +8,10 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
+from array import array
 from pathlib import Path
 
 from app.services.engines.base import (
@@ -20,11 +22,13 @@ from app.services.engines.base import (
     MediaInfo,
     MediaProbeError,
     OnProgress,
+    Peaks,
     RenderError,
     VideoStreamInfo,
 )
 
 PROBE_TIMEOUT_SEC = 30
+PEAKS_SAMPLE_RATE = 8000  # 파형 계산용으로 소리를 이 정도로만 풀어 받는다
 RENDER_TIMEOUT_SEC = 60 * 60  # 긴 영상도 저사양 PC에서 끝낼 수 있게 넉넉히 1시간
 
 # 출력 확장자별 인코딩 설정
@@ -141,6 +145,51 @@ class FFmpegEngine(MediaEngine):
             on_progress(1.0)
 
     # ------------------------------------------------------------------
+    def extract_peaks(self, path: Path, peaks_per_sec: float) -> Peaks:
+        """FFmpeg로 소리를 '숫자 흐름'으로 풀어 받으면서 구간별 최대값만 남긴다.
+
+        - 모노(-ac 1), 8000Hz(-ar)로 줄여서 받는다 → 파형 모양에는 충분하고 처리량은 1/11
+        - s16le = 숫자 하나가 2바이트 정수(-32768 ~ 32767)인 날(raw) 오디오
+        - 전체를 메모리에 올리지 않고 조각조각 읽으며 계산 → 2시간짜리 영상도 메모리를 거의 안 씀
+        """
+        samples_per_peak = max(1, round(PEAKS_SAMPLE_RATE / peaks_per_sec))
+        bytes_per_peak = samples_per_peak * 2
+        cmd = [
+            self.ffmpeg, "-nostdin", "-v", "error",
+            "-i", str(path),
+            "-vn", "-ac", "1", "-ar", str(PEAKS_SAMPLE_RATE),
+            "-f", "s16le", "-",  # "-" = 파일 대신 표준출력으로 보내기
+        ]
+        values: list[float] = []
+        buffer = b""
+        with tempfile.TemporaryFile() as err_file:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err_file)
+            assert proc.stdout is not None
+            try:
+                while chunk := proc.stdout.read(bytes_per_peak * 1024):
+                    buffer += chunk
+                    usable = len(buffer) - len(buffer) % bytes_per_peak
+                    values.extend(_peaks_from_pcm(buffer[:usable], samples_per_peak))
+                    buffer = buffer[usable:]
+                if len(buffer) >= 2:  # 마지막 남은 자투리 구간
+                    values.extend(_peaks_from_pcm(buffer[: len(buffer) - len(buffer) % 2], samples_per_peak))
+                proc.wait(timeout=PROBE_TIMEOUT_SEC)
+            except BaseException:
+                proc.kill()
+                proc.wait()
+                raise
+            if proc.returncode != 0:
+                err_file.seek(0)
+                err = err_file.read().decode("utf-8", errors="replace").strip()
+                raise MediaProbeError(f"파형을 만들 수 없습니다: {err.splitlines()[-1] if err else ''}")
+
+        return Peaks(
+            duration_sec=len(values) * samples_per_peak / PEAKS_SAMPLE_RATE,
+            peaks_per_sec=PEAKS_SAMPLE_RATE / samples_per_peak,
+            values=values,
+        )
+
+    # ------------------------------------------------------------------
     @staticmethod
     def _to_media_info(path: Path, data: dict) -> MediaInfo:
         """ffprobe의 JSON을 엔진 공통 형식(MediaInfo)으로 번역한다."""
@@ -235,6 +284,20 @@ def build_edit_command(
 
     cmd.append(str(dst))
     return cmd
+
+
+def _peaks_from_pcm(data: bytes, samples_per_peak: int) -> list[float]:
+    """2바이트 정수 오디오를 samples_per_peak 개씩 묶어, 묶음마다 가장 큰 크기(0~1)를 구한다."""
+    samples = array("h")  # "h" = 2바이트 부호 있는 정수 배열 (파이썬 내장, C 속도)
+    samples.frombytes(data)
+    if sys.byteorder == "big":  # s16le 는 little-endian. 대부분의 PC는 little 이라 해당 없음
+        samples.byteswap()
+    out = []
+    for i in range(0, len(samples), samples_per_peak):
+        block = samples[i : i + samples_per_peak]
+        loudest = max(max(block), -min(block))  # 위아래 중 더 큰 쪽
+        out.append(round(min(loudest / 32768, 1.0), 3))
+    return out
 
 
 def _parse_fps(rate: str | None) -> float | None:
