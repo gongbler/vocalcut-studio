@@ -74,6 +74,7 @@ input[type="number"] {
 }
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 .result { border-color: #3ecf8e66; }
+.job-progress { margin-top: 12px; font-size: 14px; }
 .space-between { justify-content: space-between; }
 
 /* 출력 형식 선택 (라디오 버튼을 칩 모양으로) */

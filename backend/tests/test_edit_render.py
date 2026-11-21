@@ -109,6 +109,33 @@ def test_fade_in_starts_silent(sine_wav, tmp_path):
 
 
 @requires_ffmpeg
+def test_render_reports_progress_up_to_100(tmp_path):
+    """FFmpeg의 -progress 출력을 읽어 진행률이 0 → 1.0 으로 '증가'하는지 확인."""
+    engine = FFmpegEngine()
+    src = tmp_path / "long.wav"
+    subprocess.run([FFMPEG, "-y", "-v", "error", "-f", "lavfi", "-i", "sine=duration=60", str(src)], check=True)
+    seen: list[float] = []
+
+    engine.render_edit(src, tmp_path / "out.mp3", EditSpec(), engine.probe(src), on_progress=seen.append)
+
+    assert seen[-1] == 1.0
+    assert len(seen) >= 2
+    assert seen == sorted(seen)  # 거꾸로 가지 않는다
+
+
+@requires_ffmpeg
+def test_failed_render_removes_partial_output(sine_wav, tmp_path):
+    engine = FFmpegEngine()
+    info = engine.probe(sine_wav)
+    sine_wav.write_bytes(b"broken now")  # 분석 후 파일이 망가진 상황
+    out = tmp_path / "out.mp3"
+
+    with pytest.raises(RenderError):
+        engine.render_edit(sine_wav, out, EditSpec(), info)
+    assert not out.exists()
+
+
+@requires_ffmpeg
 def test_trim_video_keeps_video_and_audio(test_mp4, tmp_path):
     engine = FFmpegEngine()
     out = tmp_path / "cut.mp4"

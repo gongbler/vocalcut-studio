@@ -1,4 +1,5 @@
-import { postJson } from "./errors";
+import { errorMessage, postJson } from "./errors";
+import type { Job } from "./jobs";
 
 export type OutputFormat = "mp4" | "mp3" | "wav";
 
@@ -24,6 +25,14 @@ export type EditOutput = {
   download_url: string;
 };
 
-export function createEdit(req: EditRequest): Promise<EditOutput> {
-  return postJson<EditOutput>("/api/edits", req);
+/** 편집 주문 → 결과물이 아니라 '번호표(Job)'를 바로 받는다 */
+export function createEdit(req: EditRequest): Promise<Job> {
+  return postJson<Job>("/api/edits", req);
+}
+
+export async function getOutput(id: string): Promise<EditOutput> {
+  const res = await fetch(`/api/outputs/${id}`);
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(errorMessage(body, res.status));
+  return body as EditOutput;
 }

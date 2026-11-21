@@ -6,8 +6,12 @@ FFmpeg든, 나중에 바꿀 다른 엔진이든 이 규격만 지키면 그대�
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+# 엔진이 진행률(0.0~1.0)을 알려줄 때 부르는 함수
+OnProgress = Callable[[float], None]
 
 
 # ---------- 결과 데이터 (엔진 종류와 상관없이 같은 모양) ----------
@@ -90,9 +94,17 @@ class MediaEngine(ABC):
         """파일을 분석해 길이·포맷·트랙 정보를 돌려준다."""
 
     @abstractmethod
-    def render_edit(self, src: Path, dst: Path, spec: EditSpec, info: MediaInfo) -> None:
+    def render_edit(
+        self,
+        src: Path,
+        dst: Path,
+        spec: EditSpec,
+        info: MediaInfo,
+        on_progress: OnProgress | None = None,
+    ) -> None:
         """src 를 spec 대로 편집해 dst 에 저장한다.
 
         출력 형식은 dst 의 확장자로 결정한다 (.mp4 = 영상, .mp3 = 오디오).
         spec 값이 올바른지는 호출하는 쪽(서비스)이 미리 검사한다.
+        on_progress 가 주어지면 진행률(0.0~1.0)을 수시로 알려준다.
         """

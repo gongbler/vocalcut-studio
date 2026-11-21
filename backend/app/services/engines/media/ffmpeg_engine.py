@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import tempfile
+import time
 from pathlib import Path
 
 from app.services.engines.base import (
@@ -17,6 +19,7 @@ from app.services.engines.base import (
     MediaEngine,
     MediaInfo,
     MediaProbeError,
+    OnProgress,
     RenderError,
     VideoStreamInfo,
 )
@@ -83,21 +86,59 @@ class FFmpegEngine(MediaEngine):
         return self._to_media_info(path, data)
 
     # ------------------------------------------------------------------
-    def render_edit(self, src: Path, dst: Path, spec: EditSpec, info: MediaInfo) -> None:
+    def render_edit(
+        self,
+        src: Path,
+        dst: Path,
+        spec: EditSpec,
+        info: MediaInfo,
+        on_progress: OnProgress | None = None,
+    ) -> None:
         cmd = build_edit_command(self.ffmpeg, Path(src), Path(dst), spec, info)
-        try:
-            result = subprocess.run(
-                cmd, capture_output=True, timeout=RENDER_TIMEOUT_SEC, check=False
-            )
-        except subprocess.TimeoutExpired as e:
-            Path(dst).unlink(missing_ok=True)
-            raise RenderError("렌더링 시간이 초과되었습니다.") from e
+        end = spec.end_sec if spec.end_sec is not None else info.duration_sec
+        self._run_with_progress(cmd, Path(dst), total_sec=end - spec.start_sec, on_progress=on_progress)
 
-        if result.returncode != 0:
-            Path(dst).unlink(missing_ok=True)  # 반쯤 만들어진 결과물 삭제
-            err = result.stderr.decode("utf-8", errors="replace").strip()
-            last_lines = "\n".join(err.splitlines()[-5:])  # 마지막 몇 줄에 원인이 있다
-            raise RenderError(f"FFmpeg 렌더링 실패: {last_lines}")
+    def _run_with_progress(
+        self, cmd: list[str], dst: Path, total_sec: float, on_progress: OnProgress | None
+    ) -> None:
+        """FFmpeg를 실행하면서 진행률을 읽어 on_progress 로 알려준다.
+
+        `-progress pipe:1` 옵션을 주면 FFmpeg가 표준출력(stdout)으로 이런 줄을 계속 보낸다:
+            out_time_us=1234567    ← 지금까지 만든 결과물의 길이 (마이크로초)
+            progress=continue      ← 마지막엔 progress=end
+        """
+        cmd = [*cmd[:-1], "-progress", "pipe:1", "-nostats", cmd[-1]]
+
+        # 에러 메시지(stderr)는 임시 파일로 받는다.
+        # (stdout 과 stderr 를 둘 다 파이프로 받으면, 안 읽는 쪽이 가득 차서 FFmpeg가 멈출 수 있다)
+        with tempfile.TemporaryFile() as err_file:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err_file)
+            deadline = time.monotonic() + RENDER_TIMEOUT_SEC
+            try:
+                assert proc.stdout is not None
+                for raw in proc.stdout:  # FFmpeg가 줄을 보낼 때마다 반복
+                    if time.monotonic() > deadline:
+                        proc.kill()
+                        raise RenderError("렌더링 시간이 초과되었습니다.")
+                    key, _, value = raw.decode("ascii", "replace").strip().partition("=")
+                    if key == "out_time_us" and on_progress and total_sec > 0 and value.isdigit():
+                        on_progress(min(int(value) / 1_000_000 / total_sec, 0.99))
+                proc.wait()
+            except BaseException:
+                proc.kill()
+                proc.wait()
+                dst.unlink(missing_ok=True)
+                raise
+
+            if proc.returncode != 0:
+                dst.unlink(missing_ok=True)  # 반쯤 만들어진 결과물 삭제
+                err_file.seek(0)
+                err = err_file.read().decode("utf-8", errors="replace").strip()
+                last_lines = "\n".join(err.splitlines()[-5:])  # 마지막 몇 줄에 원인이 있다
+                raise RenderError(f"FFmpeg 렌더링 실패: {last_lines}")
+
+        if on_progress:
+            on_progress(1.0)
 
     # ------------------------------------------------------------------
     @staticmethod

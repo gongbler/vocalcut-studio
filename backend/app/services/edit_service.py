@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.services import media_service
-from app.services.engines.base import EditSpec, MediaEngine, MediaInfo, RenderError
+from app.services.engines.base import EditSpec, MediaEngine, MediaInfo, OnProgress, RenderError
 from app.storage.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -87,6 +87,30 @@ def validate_spec(spec: EditSpec, duration: float) -> EditSpec:
     )
 
 
+@dataclass(frozen=True)
+class PreparedEdit:
+    """검사를 통과한 편집 주문. 이 상태로 작업 대기열에 넣는다."""
+    source: media_service.MediaFile
+    spec: EditSpec
+    format: str
+
+
+def prepare_edit(
+    ws: Workspace,
+    engine: MediaEngine,
+    source_id: str,
+    spec: EditSpec,
+    output_format: str | None = None,
+) -> PreparedEdit:
+    """빠른 검사만 한다 (몇 밀리초). 잘못된 주문은 대기열에 넣기 '전에' 바로 거절하기 위함."""
+    source = media_service.get_media(ws, engine, source_id)  # 없으면 MediaNotFoundError
+    return PreparedEdit(
+        source=source,
+        spec=validate_spec(spec, source.info.duration_sec),
+        format=resolve_format(output_format, source.info),
+    )
+
+
 def create_edit(
     ws: Workspace,
     engine: MediaEngine,
@@ -94,9 +118,19 @@ def create_edit(
     spec: EditSpec,
     output_format: str | None = None,
 ) -> EditOutput:
-    source = media_service.get_media(ws, engine, source_id)  # 없으면 MediaNotFoundError
-    spec = validate_spec(spec, source.info.duration_sec)
-    fmt = resolve_format(output_format, source.info)
+    """검사 + 렌더링을 한 번에 (테스트·스크립트용)."""
+    return run_edit(ws, engine, prepare_edit(ws, engine, source_id, spec, output_format))
+
+
+def run_edit(
+    ws: Workspace,
+    engine: MediaEngine,
+    prepared: PreparedEdit,
+    on_progress: OnProgress | None = None,
+) -> EditOutput:
+    """실제 렌더링 (오래 걸림). 작업 대기열의 작업자 스레드에서 실행된다."""
+    source, spec, fmt = prepared.source, prepared.spec, prepared.format
+    source_id = source.id
 
     ext = f".{fmt}"
     stem = Path(source.original_name).stem or "output"
@@ -105,7 +139,7 @@ def create_edit(
     output_id, out_dir = ws.create_output_dir()
     dst = out_dir / f"result{ext}"
     try:
-        engine.render_edit(source.path, dst, spec, source.info)
+        engine.render_edit(source.path, dst, spec, source.info, on_progress=on_progress)
         info = engine.probe(dst)
     except RenderError:
         logger.exception("render failed for source %s", source_id)

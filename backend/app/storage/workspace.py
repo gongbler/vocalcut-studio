@@ -9,6 +9,7 @@
       uploads/<file_id>/meta.json    ← 원래 파일 이름 등 부가 정보
       temp/                          ← 처리 중 임시 파일
       outputs/<output_id>/result.mp4 ← 편집 결과물 (+ meta.json)
+      jobs/<job_id>.json             ← 작업 대기열 기록
 """
 from __future__ import annotations
 
@@ -36,9 +37,10 @@ class Workspace:
         self.uploads = self.root / "uploads"
         self.temp = self.root / "temp"
         self.outputs = self.root / "outputs"
+        self.jobs = self.root / "jobs"
 
     def ensure(self) -> None:
-        for d in (self.uploads, self.temp, self.outputs):
+        for d in (self.uploads, self.temp, self.outputs, self.jobs):
             d.mkdir(parents=True, exist_ok=True)
 
     # ---------- 공통 ----------

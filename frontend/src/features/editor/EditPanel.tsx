@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { createEdit, type EditOutput, type OutputFormat } from "../../api/edits";
+import { createEdit, getOutput, type EditOutput, type OutputFormat } from "../../api/edits";
 import type { MediaFile } from "../../api/files";
+import { waitForJob, type Job } from "../../api/jobs";
+import JobProgress from "../../components/JobProgress";
 import { formatDuration } from "../../utils/format";
 
 type Props = {
@@ -32,6 +34,7 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
   const [format, setFormat] = useState<OutputFormat>(formats[0]);
 
   const [busy, setBusy] = useState(false);
+  const [job, setJob] = useState<Job | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,9 +84,11 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
 
   const render = async () => {
     setBusy(true);
+    setJob(null);
     setError(null);
     try {
-      const output = await createEdit({
+      // ① 주문 → 번호표를 바로 받음 (잘못된 값이면 여기서 바로 에러)
+      const ticket = await createEdit({
         source_id: media.id,
         start_sec: start,
         end_sec: end,
@@ -92,7 +97,11 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
         fade_out_sec: fadeOut,
         output_format: format,
       });
-      onRendered(output);
+      setJob(ticket);
+      // ② 끝날 때까지 1초마다 진행 상황 확인
+      const done = await waitForJob(ticket.id, setJob);
+      // ③ 완료되면 결과물 정보를 받아 화면에 표시
+      onRendered(await getOutput(done.result!.output_id));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -174,12 +183,10 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
           ▶ 구간 미리듣기
         </button>
         <button onClick={render} disabled={busy || !!problem}>
-          {busy ? `처리 중… ${elapsed}초` : "편집 결과 만들기"}
+          {busy ? "처리 중…" : "편집 결과 만들기"}
         </button>
       </div>
-      {busy && media.kind === "video" && (
-        <p className="hint">영상은 다시 인코딩하느라 시간이 걸려요. 창을 닫지 마세요.</p>
-      )}
+      {busy && <JobProgress job={job} elapsed={elapsed} />}
       {error && <p className="bad">❌ {error}</p>}
     </section>
   );

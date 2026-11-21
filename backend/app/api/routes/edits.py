@@ -1,29 +1,36 @@
 """편집 요청 / 결과물 조회 API.
 
-※ 지금은 렌더링이 끝날 때까지 요청이 기다리는 '동기' 방식이다.
-   짧은 노래는 금방 끝나지만, 긴 영상은 수십 초~수 분 걸릴 수 있다.
-   → Step 2에서 작업 대기열(Job Queue)로 바꿔 화면이 기다리지 않게 만든다.
+렌더링은 작업 대기열(Job Queue)에서 처리한다 → 요청은 번호표만 받고 바로 끝나므로 화면이 멈추지 않는다.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
-from app.api.deps import get_engine, get_workspace
+from app.api.deps import get_engine, get_job_manager, get_workspace
+from app.jobs.manager import JobManager, ProgressReporter
 from app.schemas.edit import EditOutputOut, EditRequest
+from app.schemas.job import JobOut
 from app.services import edit_service, media_service
-from app.services.engines.base import EngineNotAvailableError, MediaEngine, RenderError
+from app.services.engines.base import EngineNotAvailableError, MediaEngine
 from app.storage.workspace import Workspace
 
 router = APIRouter(tags=["edits"])
 
 
-@router.post("/edits", response_model=EditOutputOut, status_code=201)
+@router.post("/edits", response_model=JobOut, status_code=202)
 def create_edit(
     req: EditRequest,
     ws: Workspace = Depends(get_workspace),
     engine: MediaEngine = Depends(get_engine),
-) -> EditOutputOut:
+    jobs: JobManager = Depends(get_job_manager),
+) -> JobOut:
+    """편집 주문 접수.
+
+    1) 검사는 지금 바로 한다 → 잘못된 값이면 대기열에 넣지 않고 즉시 4xx 에러.
+    2) 통과하면 렌더링을 대기열에 넣고 '번호표(Job)'를 바로 돌려준다 (202 Accepted = 접수됨).
+    3) 결과는 GET /api/jobs/{id} 로 확인 → 완료되면 result.output_id 로 결과물 조회.
+    """
     try:
-        output = edit_service.create_edit(
+        prepared = edit_service.prepare_edit(
             ws, engine, req.source_id, req.to_spec(), output_format=req.output_format
         )
     except media_service.MediaNotFoundError as e:
@@ -32,10 +39,14 @@ def create_edit(
         raise HTTPException(status_code=422, detail=str(e))
     except EngineNotAvailableError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    except RenderError:
-        # 자세한 원인은 서버 로그에 남아 있다 (edit_service 에서 기록)
-        raise HTTPException(status_code=500, detail="편집 결과물을 만드는 중 오류가 발생했습니다. 서버 로그를 확인하세요.")
-    return EditOutputOut.from_output(output)
+
+    def work(report: ProgressReporter) -> dict:
+        report(0.0, "렌더링 중")
+        output = edit_service.run_edit(ws, engine, prepared, on_progress=lambda p: report(p, None))
+        return {"output_id": output.id}
+
+    job = jobs.submit("edit", work, extra={"source_id": req.source_id})
+    return JobOut.from_job(job)
 
 
 @router.get("/outputs/{output_id}", response_model=EditOutputOut)
