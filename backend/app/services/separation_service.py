@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import time
@@ -33,6 +34,37 @@ def remove_dir_with_retry(path: Path, attempts: int = 10, delay: float = 0.3) ->
             return
         time.sleep(delay)
     logger.warning("could not remove temp dir: %s", path)
+
+
+# ---------- 처리 속도 기록 (예상 시간을 '이 PC의 실제 기록'으로 계산하기 위함) ----------
+
+SPEED_FILE = "separation_speed.json"
+SPEED_KEEP = 10  # 최근 10번만 기억 (PC 상태가 바뀌면 자연스럽게 새 기록으로 교체)
+
+
+def record_speed(ws: Workspace, elapsed: float, audio_sec: float) -> None:
+    """이번 분리가 '곡 길이의 몇 배' 걸렸는지 저장한다."""
+    if audio_sec < 30:  # 짧은 곡은 모델 불러오는 시간 비중이 커서(실측 10초 곡 3.7~3.9배) 기준으로 부적절
+        return
+    path = ws.root / SPEED_FILE
+    try:
+        ratios = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        ratios = []
+    ratios = (ratios + [round(elapsed / audio_sec, 3)])[-SPEED_KEEP:]
+    path.write_text(json.dumps(ratios), encoding="utf-8")
+
+
+def speed_ratio(ws: Workspace) -> float | None:
+    """최근 기록의 중앙값 (기록이 없으면 None). 중앙값은 한 번 유난히 느렸던 기록에 덜 흔들린다."""
+    try:
+        ratios = sorted(json.loads((ws.root / SPEED_FILE).read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return None
+    if not ratios:
+        return None
+    mid = len(ratios) // 2
+    return ratios[mid] if len(ratios) % 2 else (ratios[mid - 1] + ratios[mid]) / 2
 
 
 def prepare(ws: Workspace, engine: MediaEngine, source_id: str) -> media_service.MediaFile:
@@ -77,7 +109,9 @@ def run(
     work_dir = ws.temp / f"sep_{uuid.uuid4().hex}"
     work_dir.mkdir(parents=True)
     try:
+        started = time.monotonic()
         stems = separator.separate(source.path, work_dir, on_progress=on_progress, on_stage=on_stage)
+        record_speed(ws, elapsed=time.monotonic() - started, audio_sec=source.info.duration_sec)
         base = Path(source.original_name).stem or "track"
         ids: dict[str, str] = {}
         try:

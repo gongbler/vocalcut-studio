@@ -7,7 +7,12 @@ export type HealthResponse = {
   version: string;
   python: string;
   ffmpeg: { available: boolean; path: string | null };
-  separator: { engine: string; available: boolean; reason: string | null };
+  separator: {
+    engine: string;
+    available: boolean;
+    reason: string | null;
+    speed_ratio: number | null; // 이 PC 실측: 걸린 시간 ÷ 곡 길이
+  };
 };
 
 export async function getHealth(): Promise<HealthResponse> {

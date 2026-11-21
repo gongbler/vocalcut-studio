@@ -14,18 +14,20 @@ type Props = {
   onSeparated: (stems: Stems) => void;
 };
 
-// 실측(i5-4200M, CPU): 곡 길이의 약 2.5~3.2배
-const SPEED_MIN = 2.5;
-const SPEED_MAX = 3.2;
+// 기록이 아직 없을 때 쓰는 기본값 (개발 PC i5-4200M 실측 중앙값)
+const DEFAULT_RATIO = 2.95;
 
-function estimate(durationSec: number): string {
-  const lo = Math.ceil((durationSec * SPEED_MIN) / 60);
-  const hi = Math.ceil((durationSec * SPEED_MAX) / 60);
-  return lo === hi ? `약 ${lo}분` : `약 ${lo}~${hi}분`;
+function estimate(durationSec: number, ratio: number | null): string {
+  const minutes = Math.max(1, Math.round((durationSec * (ratio ?? DEFAULT_RATIO)) / 60));
+  return `약 ${minutes}분`;
 }
 
 export default function SeparationPanel({ source, stems, onSeparated }: Props) {
-  const [available, setAvailable] = useState<{ ok: boolean; reason: string | null } | null>(null);
+  const [available, setAvailable] = useState<{
+    ok: boolean;
+    reason: string | null;
+    ratio: number | null;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -35,8 +37,10 @@ export default function SeparationPanel({ source, stems, onSeparated }: Props) {
   // AI 분리 기능이 설치돼 있는지 서버에 물어본다 (서버는 '설치 여부'만 가볍게 확인)
   useEffect(() => {
     getHealth()
-      .then((h) => setAvailable({ ok: h.separator.available, reason: h.separator.reason }))
-      .catch(() => setAvailable({ ok: false, reason: "서버에 연결할 수 없습니다." }));
+      .then((h) =>
+        setAvailable({ ok: h.separator.available, reason: h.separator.reason, ratio: h.separator.speed_ratio }),
+      )
+      .catch(() => setAvailable({ ok: false, reason: "서버에 연결할 수 없습니다.", ratio: null }));
   }, []);
 
   const start = async () => {
@@ -78,9 +82,10 @@ export default function SeparationPanel({ source, stems, onSeparated }: Props) {
       ) : (
         <>
           <p className="hint">
-            Demucs AI가 노래에서 목소리와 반주를 나눕니다. 이 PC(CPU)에서는{" "}
-            <b>{estimate(source.duration_sec)}</b> 걸릴 것으로 예상돼요. 처리 중에도 다른 편집은 대기열에서 순서를
-            기다립니다.
+            Demucs AI가 노래에서 목소리와 반주를 나눕니다.{" "}
+            <b>{estimate(source.duration_sec, available?.ratio ?? null)}</b> 걸릴 것으로 예상돼요
+            {available?.ratio ? " (이 PC의 최근 분리 기록 기준)" : " (첫 분리 전이라 기본값 기준)"}. 처리 중에도
+            다른 편집은 대기열에서 순서를 기다립니다.
           </p>
           {available && !available.ok && <p className="bad">⚠️ 사용할 수 없음: {available.reason}</p>}
           {!busy && (

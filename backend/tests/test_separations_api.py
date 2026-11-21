@@ -151,4 +151,16 @@ def test_cancel_queued_job_never_runs(client, song_id, fake):
 
 def test_health_reports_separator(client):
     sep = client.get("/api/health").json()["separator"]
-    assert sep == {"engine": "fake", "available": True, "reason": None}
+    assert sep == {"engine": "fake", "available": True, "reason": None, "speed_ratio": None}
+
+
+def test_speed_ratio_uses_median_of_recent_runs(tmp_path):
+    from app.services import separation_service as s
+    ws = Workspace(tmp_path)
+    ws.ensure()
+    assert s.speed_ratio(ws) is None
+    s.record_speed(ws, elapsed=50, audio_sec=10)        # 짧은 곡은 기록 안 함 (모델 로딩 시간 때문에 부정확)
+    assert s.speed_ratio(ws) is None
+    for elapsed in (300, 330, 900):                     # 900 = 한 번 유난히 느렸던 기록
+        s.record_speed(ws, elapsed=elapsed, audio_sec=100)
+    assert s.speed_ratio(ws) == 3.3                     # 중앙값이라 튀는 기록에 휘둘리지 않음

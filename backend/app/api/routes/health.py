@@ -9,15 +9,20 @@ import shutil
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_separator
+from app.api.deps import get_separator, get_workspace
 from app.core.config import APP_NAME, APP_VERSION
+from app.services import separation_service
 from app.services.engines.base import SeparatorEngine
+from app.storage.workspace import Workspace
 
 router = APIRouter()
 
 
 @router.get("/health")
-def health(separator: SeparatorEngine = Depends(get_separator)) -> dict:
+def health(
+    separator: SeparatorEngine = Depends(get_separator),
+    ws: Workspace = Depends(get_workspace),
+) -> dict:
     ffmpeg_path = shutil.which("ffmpeg")  # PATH에서 ffmpeg 실행 파일을 찾는다
     sep = separator.availability()
     return {
@@ -33,5 +38,7 @@ def health(separator: SeparatorEngine = Depends(get_separator)) -> dict:
             "engine": separator.name,
             "available": sep.ok,
             "reason": sep.reason or None,
+            # 이 PC에서 실제로 걸린 시간 ÷ 곡 길이 (기록이 없으면 null)
+            "speed_ratio": separation_service.speed_ratio(ws),
         },
     }
