@@ -13,9 +13,16 @@ export default function MediaInfoCard({ media, playerRef }: Props) {
 
   return (
     <section className="card">
-      <h2>
-        {media.kind === "video" ? "🎬" : "🎧"} {media.original_name}
-      </h2>
+      <div className="row space-between">
+        <h2>
+          {media.kind === "video" ? "🎬" : "🎧"} {media.original_name}
+        </h2>
+        {media.stem && (
+          <a className="button" href={media.download_url} download>
+            ⬇ WAV 다운로드
+          </a>
+        )}
+      </div>
 
       {/* 미리보기: 서버의 /content 주소를 그대로 재생 */}
       {media.kind === "video" ? (

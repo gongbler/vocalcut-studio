@@ -82,3 +82,17 @@ def get_file_content(
     except media_service.MediaNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return FileResponse(media.path, filename=media.original_name, content_disposition_type="inline")
+
+
+@router.get("/{file_id}/download")
+def download_file(
+    file_id: str,
+    ws: Workspace = Depends(get_workspace),
+    engine: MediaEngine = Depends(get_engine),
+) -> FileResponse:
+    """파일로 저장 (예: 분리된 보컬.wav 를 그대로 내려받기)."""
+    try:
+        media = media_service.get_media(ws, engine, file_id)
+    except media_service.MediaNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return FileResponse(media.path, filename=media.original_name, content_disposition_type="attachment")

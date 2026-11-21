@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -33,6 +34,48 @@ class MediaFile:
     original_name: str
     path: Path
     info: MediaInfo
+    derived_from: str | None = None  # AI 분리로 만들어진 파일이면 원곡의 id
+    stem: str | None = None          # "vocals" | "instrumental"
+
+
+def register_file(
+    ws: Workspace,
+    engine: MediaEngine,
+    src: Path,
+    display_name: str,
+    extra_meta: dict | None = None,
+) -> MediaFile:
+    """서버가 만든 파일(예: 분리된 보컬)을 '업로드된 파일'과 똑같이 등록한다.
+
+    → 등록만 하면 파형·자르기·다운로드 등 기존 기능을 그대로 쓸 수 있다.
+    """
+    file_id, upload_dir = ws.create_upload_dir()
+    dest = upload_dir / f"source{src.suffix.lower()}"
+    try:
+        shutil.move(str(src), dest)
+        info = engine.probe(dest)
+    except Exception:
+        ws.remove_upload(file_id)
+        raise
+    meta = {"original_name": display_name, "stored_name": dest.name, **(extra_meta or {})}
+    ws.write_meta(upload_dir, meta)
+    return MediaFile(id=file_id, original_name=display_name, path=dest, info=info,
+                     derived_from=meta.get("derived_from"), stem=meta.get("stem"))
+
+
+def read_meta(ws: Workspace, file_id: str) -> dict:
+    upload_dir = ws.upload_dir(file_id)
+    meta = ws.read_meta(upload_dir) if upload_dir else None
+    if not meta:
+        raise MediaNotFoundError(f"파일을 찾을 수 없습니다: {file_id}")
+    return meta
+
+
+def update_meta(ws: Workspace, file_id: str, **fields) -> None:
+    upload_dir = ws.upload_dir(file_id)
+    if not upload_dir:
+        raise MediaNotFoundError(f"파일을 찾을 수 없습니다: {file_id}")
+    ws.write_meta(upload_dir, {**read_meta(ws, file_id), **fields})
 
 
 def import_upload(
@@ -104,4 +147,6 @@ def get_media(ws: Workspace, engine: MediaEngine, file_id: str) -> MediaFile:
         original_name=meta["original_name"],
         path=path,
         info=engine.probe(path),
+        derived_from=meta.get("derived_from"),
+        stem=meta.get("stem"),
     )

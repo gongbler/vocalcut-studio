@@ -15,6 +15,13 @@ WORKSPACE_DIR = BACKEND_DIR / "workspace"
 
 # 사용할 엔진 이름. 엔진을 교체할 때는 이 값만 바꾼다.
 MEDIA_ENGINE = "ffmpeg"
+SEPARATOR_ENGINE = "demucs"
+
+# AI 모델 저장 폴더 (git 에는 올라가지 않음)
+MODELS_DIR = BACKEND_DIR / "models"
+DEMUCS_MODEL = "htdemucs"
+# 한 번에 처리할 조각 길이(초). 실측: 30초 조각 ≈ 최대 750MB (RAM 4GB PC 기준으로 정함)
+DEMUCS_CHUNK_SEC = 30.0
 
 # 업로드 허용 확장자 (소문자, 점 포함)
 ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".avi"}

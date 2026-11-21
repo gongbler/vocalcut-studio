@@ -78,6 +78,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .result { border-color: #3ecf8e66; }
 .job-progress { margin-top: 12px; font-size: 14px; }
 
+/* 원곡 / 보컬 / MR 트랙 탭 */
+.track-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.track-tabs .chip { background: var(--panel); font-weight: 600; }
+.track-tabs .chip.on { background: #7c5cff33; }
+
 /* 파형 */
 .waveform { margin-bottom: 16px; min-width: 0; }
 .waveform-canvas {

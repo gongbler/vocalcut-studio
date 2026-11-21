@@ -11,10 +11,11 @@ class JobStatus(str, Enum):
     RUNNING = "running"  # 처리 중
     DONE = "done"        # 완료
     ERROR = "error"      # 실패
+    CANCELLED = "cancelled"  # 사용자가 취소
 
     @property
     def finished(self) -> bool:
-        return self in (JobStatus.DONE, JobStatus.ERROR)
+        return self in (JobStatus.DONE, JobStatus.ERROR, JobStatus.CANCELLED)
 
 
 @dataclass

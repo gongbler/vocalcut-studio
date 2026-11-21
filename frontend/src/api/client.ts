@@ -7,6 +7,7 @@ export type HealthResponse = {
   version: string;
   python: string;
   ffmpeg: { available: boolean; path: string | null };
+  separator: { engine: string; available: boolean; reason: string | null };
 };
 
 export async function getHealth(): Promise<HealthResponse> {

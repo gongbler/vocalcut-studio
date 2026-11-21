@@ -33,6 +33,12 @@ export default function ServerStatus() {
           <span className={state.data.ffmpeg.available ? "good" : "bad"}>
             ● FFmpeg {state.data.ffmpeg.available ? "OK" : "없음"}
           </span>
+          <span
+            className={state.data.separator.available ? "good" : "bad"}
+            title={state.data.separator.reason ?? undefined}
+          >
+            ● AI 분리 {state.data.separator.available ? "OK" : "없음"}
+          </span>
         </>
       )}
       <button className="small" onClick={check}>

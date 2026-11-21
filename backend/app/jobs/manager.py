@@ -30,11 +30,16 @@ class UserFacingError(Exception):
     """메시지를 그대로 사용자에게 보여줘도 되는 에러."""
 
 
+class JobCancelled(Exception):
+    """취소 요청을 받은 작업이 다음 진행률 보고 때 스스로 멈추도록 던지는 신호."""
+
+
 class JobManager:
     def __init__(self, store_dir: Path, max_workers: int = 1) -> None:
         self.store_dir = Path(store_dir)
         self.store_dir.mkdir(parents=True, exist_ok=True)
         self._jobs: dict[str, Job] = {}
+        self._cancel_flags: dict[str, threading.Event] = {}  # 작업별 '취소해 주세요' 깃발
         self._lock = threading.Lock()  # 여러 스레드가 동시에 _jobs 를 고치지 못하게 잠금
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="job")
         self._load_saved_jobs()
@@ -46,9 +51,33 @@ class JobManager:
                   message="대기 중", extra=extra or {})
         with self._lock:
             self._jobs[job.id] = job
+            self._cancel_flags[job.id] = threading.Event()
         self._save(job)
         self._executor.submit(self._run, job.id, func)
         return self.get(job.id)
+
+    def cancel(self, job_id: str) -> Job | None:
+        """작업 취소 요청.
+
+        - 대기 중이면: 바로 '취소됨'으로 바꾼다 (차례가 와도 실행하지 않음)
+        - 처리 중이면: 깃발만 세운다 → 작업이 다음에 진행률을 보고할 때 JobCancelled 로 멈춘다
+          (작업을 바깥에서 강제로 죽이면 파일이 반쯤 쓰인 채 남을 수 있어서, 스스로 멈추게 한다)
+        - 이미 끝났으면: 아무것도 하지 않는다
+        """
+        with self._lock:
+            job = self._jobs.get(job_id)
+            flag = self._cancel_flags.get(job_id)
+            if job is None:
+                return None
+            if job.status.finished or flag is None:
+                return Job.from_dict(job.to_dict())
+            flag.set()
+            queued = job.status == JobStatus.QUEUED
+        if queued:
+            self._update(job_id, status=JobStatus.CANCELLED, message="취소됨")
+        else:
+            self._update(job_id, message="취소하는 중…", persist=False)
+        return self.get(job_id)
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:
@@ -61,16 +90,24 @@ class JobManager:
 
     # ---------------- 내부 동작 ----------------
     def _run(self, job_id: str, func: JobFunc) -> None:
+        flag = self._cancel_flags[job_id]
+        if flag.is_set():  # 대기 중에 취소됨 → 실행하지 않고 끝
+            self._cancel_flags.pop(job_id, None)
+            return
         self._update(job_id, status=JobStatus.RUNNING, message="처리 중", progress=0.0)
 
         def report(progress: float, message: str | None = None) -> None:
+            if flag.is_set():
+                raise JobCancelled()  # 작업 함수 안에서 이 에러가 퍼지며 자연스럽게 멈춘다
             fields: dict[str, Any] = {"progress": min(max(progress, 0.0), 1.0)}
-            if message:
+            if message and not flag.is_set():
                 fields["message"] = message
             self._update(job_id, persist=False, **fields)  # 진행률은 너무 자주 바뀌어 파일 저장 생략
 
         try:
             result = func(report)
+        except JobCancelled:
+            self._update(job_id, status=JobStatus.CANCELLED, message="취소됨", error=None)
         except UserFacingError as e:
             self._update(job_id, status=JobStatus.ERROR, error=str(e), message=None)
         except Exception:
@@ -79,6 +116,8 @@ class JobManager:
                          error="작업 중 오류가 발생했습니다. 서버 로그를 확인하세요.")
         else:
             self._update(job_id, status=JobStatus.DONE, progress=1.0, message="완료", result=result)
+        finally:
+            self._cancel_flags.pop(job_id, None)
 
     def _update(self, job_id: str, persist: bool = True, **fields: Any) -> None:
         with self._lock:

@@ -11,7 +11,17 @@ export type MediaFile = {
   video: { codec: string; width: number; height: number; fps: number | null } | null;
   audio: { codec: string; sample_rate: number; channels: number } | null;
   content_url: string;
+  download_url: string;
+  derived_from: string | null; // AI 분리 결과라면 원곡 id
+  stem: "vocals" | "instrumental" | null;
 };
+
+export async function getMedia(id: string): Promise<MediaFile> {
+  const res = await fetch(`/api/files/${id}`);
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(errorMessage(body, res.status));
+  return body as MediaFile;
+}
 
 /**
  * 파일을 서버에 올린다.

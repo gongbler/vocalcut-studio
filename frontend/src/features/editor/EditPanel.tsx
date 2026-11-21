@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createEdit, getOutput, type EditOutput, type OutputFormat } from "../../api/edits";
 import type { MediaFile } from "../../api/files";
-import { waitForJob, type Job } from "../../api/jobs";
+import { cancelJob, JobCancelledError, waitForJob, type Job } from "../../api/jobs";
 import JobProgress from "../../components/JobProgress";
+import { useElapsed } from "../../hooks/useElapsed";
 import Waveform from "../waveform/Waveform";
 import { formatDuration } from "../../utils/format";
 
@@ -37,7 +38,8 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
 
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
-  const [elapsed, setElapsed] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
+  const elapsed = useElapsed(busy);
   const [error, setError] = useState<string | null>(null);
 
   // ---- 화면에서 먼저 하는 간단한 검사 (서버도 똑같이 다시 검사한다) ----
@@ -50,14 +52,6 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
         : fadeIn + fadeOut > length
           ? "페이드 인+아웃이 자른 구간보다 깁니다."
           : null;
-
-  // ---- 렌더링 중 경과 시간 표시 (1초마다 +1) ----
-  useEffect(() => {
-    if (!busy) return;
-    setElapsed(0);
-    const timer = setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => clearInterval(timer); // 정리: 렌더링이 끝나면 타이머 해제
-  }, [busy]);
 
   // ---- 구간 미리듣기: 시작점부터 재생하다가 끝점에서 멈춘다 (다시 누르면 정지) ----
   const stopAtRef = useRef<number | null>(null);
@@ -100,9 +94,16 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
 
   const currentTime = () => round1(playerRef.current?.currentTime ?? 0);
 
+  const cancel = async () => {
+    if (!job) return;
+    setCancelling(true);
+    await cancelJob(job.id).catch(() => undefined); // 결과는 waitForJob 이 알아챈다
+  };
+
   const render = async () => {
     setBusy(true);
     setJob(null);
+    setCancelling(false);
     setError(null);
     try {
       // ① 주문 → 번호표를 바로 받음 (잘못된 값이면 여기서 바로 에러)
@@ -121,7 +122,7 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
       // ③ 완료되면 결과물 정보를 받아 화면에 표시
       onRendered(await getOutput(done.result!.output_id));
     } catch (err) {
-      setError((err as Error).message);
+      if (!(err instanceof JobCancelledError)) setError((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -217,7 +218,7 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
           {busy ? "처리 중…" : "편집 결과 만들기"}
         </button>
       </div>
-      {busy && <JobProgress job={job} elapsed={elapsed} />}
+      {busy && <JobProgress job={job} elapsed={elapsed} onCancel={cancel} cancelling={cancelling} />}
       {error && <p className="bad">❌ {error}</p>}
     </section>
   );

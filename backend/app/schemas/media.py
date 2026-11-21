@@ -40,6 +40,9 @@ class MediaFileOut(BaseModel):
     video: VideoStreamOut | None
     audio: AudioStreamOut | None
     content_url: str  # 미리보기/재생용 주소
+    download_url: str  # 다운로드용 주소
+    derived_from: str | None = None  # AI 분리 결과라면 원곡 id
+    stem: str | None = None          # "vocals" | "instrumental"
 
     @classmethod
     def from_media(cls, m: MediaFile) -> MediaFileOut:
@@ -54,4 +57,7 @@ class MediaFileOut(BaseModel):
             video=VideoStreamOut(**vars(i.video)) if i.video else None,
             audio=AudioStreamOut(**vars(i.audio)) if i.audio else None,
             content_url=f"/api/files/{m.id}/content",
+            download_url=f"/api/files/{m.id}/download",
+            derived_from=m.derived_from,
+            stem=m.stem,
         )

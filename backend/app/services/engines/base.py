@@ -93,6 +93,14 @@ class RenderError(EngineError):
     """편집 결과물을 만드는 중 실패."""
 
 
+class SeparationError(EngineError):
+    """보컬/MR 분리 실패. user_message 는 화면에 그대로 보여줘도 되는 문장."""
+
+    def __init__(self, message: str, user_message: str) -> None:
+        super().__init__(message)
+        self.user_message = user_message
+
+
 # ---------- 규격서 ----------
 
 class MediaEngine(ABC):
@@ -124,3 +132,44 @@ class MediaEngine(ABC):
     @abstractmethod
     def extract_peaks(self, path: Path, peaks_per_sec: float) -> Peaks:
         """오디오의 파형 요약(Peaks)을 계산한다. 영상이면 소리 트랙을 사용한다."""
+
+
+# ---------- 보컬/MR 분리 엔진 규격서 ----------
+
+@dataclass(frozen=True)
+class StemPaths:
+    """분리 결과 파일들."""
+    vocals: Path
+    instrumental: Path  # 보컬을 뺀 나머지 전부 (MR)
+
+
+@dataclass(frozen=True)
+class Availability:
+    ok: bool
+    reason: str = ""
+
+
+class SeparatorEngine(ABC):
+    """보컬/MR 분리 엔진이 갖춰야 할 기능.
+
+    Demucs 를 상업용 모델로 바꿀 때는 이 규격을 지키는 새 엔진만 만들면 된다.
+    """
+
+    name: str
+
+    @abstractmethod
+    def availability(self) -> Availability:
+        """사용 가능한지 '가볍게' 확인한다. (무거운 AI 라이브러리를 불러오면 안 된다)"""
+
+    @abstractmethod
+    def separate(
+        self,
+        src: Path,
+        out_dir: Path,
+        on_progress: OnProgress | None = None,
+        on_stage: Callable[[str], None] | None = None,
+    ) -> StemPaths:
+        """src 의 소리를 보컬/MR 로 나눠 out_dir 에 저장한다. 오래 걸린다(곡 길이의 수 배).
+
+        on_stage: 단계가 바뀔 때 화면에 보여줄 설명을 알려준다 (예: "AI 모델 불러오는 중").
+        """
