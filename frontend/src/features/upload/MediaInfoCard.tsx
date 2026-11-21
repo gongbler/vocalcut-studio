@@ -1,7 +1,14 @@
+import type { RefObject } from "react";
 import type { MediaFile } from "../../api/files";
 import { formatBytes, formatDuration } from "../../utils/format";
 
-export default function MediaInfoCard({ media }: { media: MediaFile }) {
+type Props = {
+  media: MediaFile;
+  /** 편집 패널이 '현재 재생 위치'를 읽고 구간 미리듣기를 할 수 있도록 플레이어를 공유한다 */
+  playerRef: RefObject<HTMLMediaElement | null>;
+};
+
+export default function MediaInfoCard({ media, playerRef }: Props) {
   const { video, audio } = media;
 
   return (
@@ -12,9 +19,21 @@ export default function MediaInfoCard({ media }: { media: MediaFile }) {
 
       {/* 미리보기: 서버의 /content 주소를 그대로 재생 */}
       {media.kind === "video" ? (
-        <video className="player" src={media.content_url} controls preload="metadata" />
+        <video
+          ref={playerRef as RefObject<HTMLVideoElement>}
+          className="player"
+          src={media.content_url}
+          controls
+          preload="metadata"
+        />
       ) : (
-        <audio className="player" src={media.content_url} controls preload="metadata" />
+        <audio
+          ref={playerRef as RefObject<HTMLAudioElement>}
+          className="player"
+          src={media.content_url}
+          controls
+          preload="metadata"
+        />
       )}
 
       <dl className="info">

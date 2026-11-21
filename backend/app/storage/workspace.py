@@ -8,7 +8,7 @@
       uploads/<file_id>/source.mp3   ← 업로드 원본 (이름은 항상 source + 확장자)
       uploads/<file_id>/meta.json    ← 원래 파일 이름 등 부가 정보
       temp/                          ← 처리 중 임시 파일
-      outputs/                       ← 최종 결과물
+      outputs/<output_id>/result.mp4 ← 편집 결과물 (+ meta.json)
 """
 from __future__ import annotations
 
@@ -41,13 +41,25 @@ class Workspace:
         for d in (self.uploads, self.temp, self.outputs):
             d.mkdir(parents=True, exist_ok=True)
 
+    # ---------- 공통 ----------
+    @staticmethod
+    def _create_dir(base: Path) -> tuple[str, Path]:
+        new_id = uuid.uuid4().hex
+        path = base / new_id
+        path.mkdir(parents=True)
+        return new_id, path
+
+    @staticmethod
+    def _existing_dir(base: Path, item_id: str) -> Path | None:
+        if not _FILE_ID_RE.fullmatch(item_id):
+            return None
+        path = base / item_id
+        return path if path.is_dir() else None
+
     # ---------- 업로드 ----------
     def create_upload_dir(self) -> tuple[str, Path]:
         """새 업로드용 폴더를 만들고 (file_id, 폴더 경로)를 돌려준다."""
-        file_id = uuid.uuid4().hex
-        path = self.uploads / file_id
-        path.mkdir(parents=True)
-        return file_id, path
+        return self._create_dir(self.uploads)
 
     @staticmethod
     def save_stream(src: BinaryIO, dest: Path, max_bytes: int) -> int:
@@ -63,13 +75,23 @@ class Workspace:
 
     def upload_dir(self, file_id: str) -> Path | None:
         """file_id 에 해당하는 폴더. 형식이 틀렸거나 없으면 None."""
-        if not _FILE_ID_RE.fullmatch(file_id):
-            return None
-        path = self.uploads / file_id
-        return path if path.is_dir() else None
+        return self._existing_dir(self.uploads, file_id)
 
     def remove_upload(self, file_id: str) -> None:
         path = self.upload_dir(file_id)
+        if path:
+            shutil.rmtree(path, ignore_errors=True)
+
+    # ---------- 결과물 ----------
+    def create_output_dir(self) -> tuple[str, Path]:
+        """새 결과물용 폴더를 만들고 (output_id, 폴더 경로)를 돌려준다."""
+        return self._create_dir(self.outputs)
+
+    def output_dir(self, output_id: str) -> Path | None:
+        return self._existing_dir(self.outputs, output_id)
+
+    def remove_output(self, output_id: str) -> None:
+        path = self.output_dir(output_id)
         if path:
             shutil.rmtree(path, ignore_errors=True)
 

@@ -46,6 +46,19 @@ class MediaInfo:
         return self.audio is not None
 
 
+@dataclass(frozen=True)
+class EditSpec:
+    """'이렇게 편집해 주세요' 주문서. 엔진 종류와 상관없이 같은 모양.
+
+    시간 단위는 모두 초(second). 페이드는 '잘라낸 결과물' 기준이다.
+    """
+    start_sec: float = 0.0
+    end_sec: float | None = None   # None 이면 파일 끝까지
+    volume_db: float = 0.0         # +6 = 약 2배 크게, -6 = 약 절반 크기
+    fade_in_sec: float = 0.0
+    fade_out_sec: float = 0.0
+
+
 # ---------- 에러 (엔진 종류와 상관없이 같은 종류) ----------
 
 class EngineError(Exception):
@@ -60,13 +73,14 @@ class MediaProbeError(EngineError):
     """파일을 분석할 수 없음 (없는 파일, 깨진 파일, 미디어가 아닌 파일 등)."""
 
 
+class RenderError(EngineError):
+    """편집 결과물을 만드는 중 실패."""
+
+
 # ---------- 규격서 ----------
 
 class MediaEngine(ABC):
-    """영상/오디오 처리 엔진이 반드시 갖춰야 할 기능 목록.
-
-    Step 1이 진행되면서 trim(), apply_audio_filters() 등이 여기에 추가된다.
-    """
+    """영상/오디오 처리 엔진이 반드시 갖춰야 할 기능 목록."""
 
     #: 엔진 이름 (로그·화면 표시용)
     name: str
@@ -74,3 +88,11 @@ class MediaEngine(ABC):
     @abstractmethod
     def probe(self, path: Path) -> MediaInfo:
         """파일을 분석해 길이·포맷·트랙 정보를 돌려준다."""
+
+    @abstractmethod
+    def render_edit(self, src: Path, dst: Path, spec: EditSpec, info: MediaInfo) -> None:
+        """src 를 spec 대로 편집해 dst 에 저장한다.
+
+        출력 형식은 dst 의 확장자로 결정한다 (.mp4 = 영상, .mp3 = 오디오).
+        spec 값이 올바른지는 호출하는 쪽(서비스)이 미리 검사한다.
+        """

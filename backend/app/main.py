@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.deps import get_workspace
-from app.api.routes import files, health
+from app.api.routes import edits, files, health
 from app.core.config import APP_NAME, APP_VERSION
 
 
@@ -24,3 +24,4 @@ app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
 # 모든 API 주소 앞에 /api 를 붙인다 → /api/health, /api/files ...
 app.include_router(health.router, prefix="/api", tags=["system"])
 app.include_router(files.router, prefix="/api")
+app.include_router(edits.router, prefix="/api")

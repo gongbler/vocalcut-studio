@@ -1,4 +1,5 @@
 // 파일 업로드/조회 API 호출 함수
+import { errorMessage } from "./errors";
 
 export type MediaFile = {
   id: string;
@@ -41,9 +42,7 @@ export function uploadFile(
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(body as MediaFile);
       } else {
-        // FastAPI 에러 응답은 {"detail": "..."} 모양
-        const detail = (body as { detail?: string } | null)?.detail;
-        reject(new Error(detail ?? `업로드 실패 (HTTP ${xhr.status})`));
+        reject(new Error(errorMessage(body, xhr.status)));
       }
     };
     xhr.onerror = () => reject(new Error("서버에 연결할 수 없습니다. 백엔드가 실행 중인지 확인하세요."));
