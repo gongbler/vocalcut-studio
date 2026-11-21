@@ -59,27 +59,43 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
     return () => clearInterval(timer); // 정리: 렌더링이 끝나면 타이머 해제
   }, [busy]);
 
-  // ---- 구간 미리듣기: 시작점부터 재생하다가 끝점에서 멈춘다 ----
+  // ---- 구간 미리듣기: 시작점부터 재생하다가 끝점에서 멈춘다 (다시 누르면 정지) ----
   const stopAtRef = useRef<number | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
     const onTime = () => {
       if (stopAtRef.current !== null && player.currentTime >= stopAtRef.current) {
-        player.pause();
-        stopAtRef.current = null;
+        player.pause(); // → 아래 onPause 가 상태를 정리한다
       }
     };
+    // 어떤 이유로든 멈추면(끝점 도달, 정지 버튼, 플레이어의 ⏸ 버튼, 파일 끝) 미리듣기 종료
+    const onPause = () => {
+      stopAtRef.current = null;
+      setPreviewing(false);
+    };
     player.addEventListener("timeupdate", onTime);
-    return () => player.removeEventListener("timeupdate", onTime);
+    player.addEventListener("pause", onPause);
+    player.addEventListener("ended", onPause);
+    return () => {
+      player.removeEventListener("timeupdate", onTime);
+      player.removeEventListener("pause", onPause);
+      player.removeEventListener("ended", onPause);
+    };
   }, [playerRef, media.id]);
 
-  const previewRange = () => {
+  const togglePreview = () => {
     const player = playerRef.current;
     if (!player) return;
+    if (previewing) {
+      player.pause();
+      return;
+    }
     player.currentTime = start;
     stopAtRef.current = end;
-    void player.play();
+    setPreviewing(true);
+    player.play().catch(() => setPreviewing(false)); // 재생이 막히면 버튼을 원래대로
   };
 
   const currentTime = () => round1(playerRef.current?.currentTime ?? 0);
@@ -194,8 +210,8 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
       {problem && <p className="bad">⚠️ {problem}</p>}
 
       <div className="row">
-        <button className="secondary" onClick={previewRange} disabled={!!problem}>
-          ▶ 구간 미리듣기
+        <button className="secondary" onClick={togglePreview} disabled={!previewing && !!problem}>
+          {previewing ? "■ 미리듣기 정지" : "▶ 구간 미리듣기"}
         </button>
         <button onClick={render} disabled={busy || !!problem}>
           {busy ? "처리 중…" : "편집 결과 만들기"}
