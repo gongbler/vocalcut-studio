@@ -62,8 +62,8 @@ audio.player { background: transparent; }
 
 /* 편집 패널 */
 .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 16px; margin-bottom: 12px; }
-.field-grid label { display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
-.field-grid label b { color: var(--text); }
+.field-grid > label { display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
+.field-grid > label b { color: var(--text); }
 .field-grid .span-2 { grid-column: 1 / -1; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .row input { flex: 1; min-width: 0; }
@@ -74,6 +74,25 @@ input[type="number"] {
 }
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 .result { border-color: #3ecf8e66; }
+.space-between { justify-content: space-between; }
+
+/* 출력 형식 선택 (라디오 버튼을 칩 모양으로) */
+.formats { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+.formats legend { padding: 0; margin-bottom: 6px; font-size: 14px; color: var(--muted); }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px;
+  cursor: pointer; color: var(--text); font-size: 14px;
+}
+.chip input { margin: 0; accent-color: var(--accent); }
+.chip.on { border-color: var(--accent); background: #7c5cff22; }
+
+a.button {
+  display: inline-block; text-decoration: none;
+  background: var(--good); color: #062b1b; font-weight: 600;
+  border-radius: 8px; padding: 8px 16px; font-size: 14px;
+}
+a.button:hover { filter: brightness(1.1); }
 
 .good { color: var(--good); }
 .bad { color: var(--bad); }

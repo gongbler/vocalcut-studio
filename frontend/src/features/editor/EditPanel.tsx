@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { createEdit, type EditOutput } from "../../api/edits";
+import { createEdit, type EditOutput, type OutputFormat } from "../../api/edits";
 import type { MediaFile } from "../../api/files";
 import { formatDuration } from "../../utils/format";
 
@@ -11,6 +11,12 @@ type Props = {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+const FORMAT_INFO: Record<OutputFormat, { label: string; hint: string }> = {
+  mp4: { label: "MP4 영상", hint: "영상 + 소리 (H.264 / AAC)" },
+  mp3: { label: "MP3", hint: "소리만 · 작은 용량 (192kbps)" },
+  wav: { label: "WAV", hint: "소리만 · 무손실 · 용량 큼 (다른 편집 프로그램용)" },
+};
+
 export default function EditPanel({ media, playerRef, onRendered }: Props) {
   const duration = media.duration_sec;
 
@@ -20,6 +26,10 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
   const [volumeDb, setVolumeDb] = useState(0);
   const [fadeIn, setFadeIn] = useState(0);
   const [fadeOut, setFadeOut] = useState(0);
+
+  // 고를 수 있는 출력 형식: 영상이면 mp4/mp3/wav, 오디오면 mp3/wav
+  const formats: OutputFormat[] = media.kind === "video" ? ["mp4", "mp3", "wav"] : ["mp3", "wav"];
+  const [format, setFormat] = useState<OutputFormat>(formats[0]);
 
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -80,6 +90,7 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
         volume_db: volumeDb,
         fade_in_sec: fadeIn,
         fade_out_sec: fadeOut,
+        output_format: format,
       });
       onRendered(output);
     } catch (err) {
@@ -134,6 +145,23 @@ export default function EditPanel({ media, playerRef, onRendered }: Props) {
           <input type="number" min={0} step={0.1} value={fadeOut}
             onChange={(e) => setFadeOut(Number(e.target.value))} />
         </label>
+
+        <fieldset className="span-2 formats">
+          <legend>출력 형식</legend>
+          <div className="row">
+            {formats.map((f) => (
+              <label key={f} className={`chip ${format === f ? "on" : ""}`}>
+                <input type="radio" name="format" value={f} checked={format === f}
+                  onChange={() => setFormat(f)} />
+                {FORMAT_INFO[f].label}
+              </label>
+            ))}
+          </div>
+          <span className="hint">
+            {FORMAT_INFO[format].hint}
+            {media.kind === "video" && format !== "mp4" && " · 영상에서 소리만 추출합니다"}
+          </span>
+        </fieldset>
       </div>
 
       <p className="hint">

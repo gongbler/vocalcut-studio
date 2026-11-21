@@ -67,3 +67,61 @@ def test_unknown_source_is_404(client):
 
 def test_unknown_output_is_404(client):
     assert client.get("/api/outputs/" + "0" * 32).status_code == 404
+    assert client.get("/api/outputs/" + "0" * 32 + "/download").status_code == 404
+
+
+# ---------- 1-4: 출력 형식 + 다운로드 ----------
+
+@pytest.fixture
+def video_id(client, test_mp4) -> str:
+    with open(test_mp4, "rb") as f:
+        return client.post("/api/files", files={"file": ("뮤직비디오.mp4", f)}).json()["id"]
+
+
+def test_default_format_audio_is_mp3(client, source_id):
+    body = client.post("/api/edits", json={"source_id": source_id}).json()
+    assert body["format"] == "mp3"
+
+
+def test_wav_output_is_lossless_pcm(client, source_id, ws):
+    from app.services.engines.media.ffmpeg_engine import FFmpegEngine
+
+    body = client.post("/api/edits", json={"source_id": source_id, "output_format": "wav"}).json()
+
+    assert body["format"] == "wav"
+    assert body["download_name"] == "내 노래_edit.wav"
+    info = FFmpegEngine().probe(ws.outputs / body["id"] / "result.wav")
+    assert info.audio.codec == "pcm_s16le"  # 무손실 WAV
+
+
+def test_extract_audio_from_video(client, video_id):
+    body = client.post("/api/edits", json={"source_id": video_id, "output_format": "mp3"}).json()
+
+    assert body["kind"] == "audio"          # 영상에서 소리만 뽑아냄
+    assert body["download_name"] == "뮤직비디오_edit.mp3"
+
+
+def test_audio_cannot_become_mp4(client, source_id, ws):
+    res = client.post("/api/edits", json={"source_id": source_id, "output_format": "mp4"})
+    assert res.status_code == 422
+    assert "MP4" in res.json()["detail"]
+    assert list(ws.outputs.iterdir()) == []
+
+
+def test_unknown_format_rejected_by_schema(client, source_id):
+    res = client.post("/api/edits", json={"source_id": source_id, "output_format": "exe"})
+    assert res.status_code == 422
+
+
+def test_download_is_attachment_with_korean_name(client, source_id):
+    body = client.post("/api/edits", json={"source_id": source_id}).json()
+
+    res = client.get(body["download_url"])
+    assert res.status_code == 200
+    disposition = res.headers["content-disposition"]
+    assert disposition.startswith("attachment")
+    # 한글 이름은 퍼센트 인코딩된 UTF-8 로 전달된다: 내 노래_edit.mp3
+    assert "filename*=utf-8''%EB%82%B4%20%EB%85%B8%EB%9E%98_edit.mp3" in disposition
+
+    # 재생용 주소는 inline (브라우저 안에서 재생)
+    assert client.get(body["content_url"]).headers["content-disposition"].startswith("inline")

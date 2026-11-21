@@ -23,7 +23,9 @@ def create_edit(
     engine: MediaEngine = Depends(get_engine),
 ) -> EditOutputOut:
     try:
-        output = edit_service.create_edit(ws, engine, req.source_id, req.to_spec())
+        output = edit_service.create_edit(
+            ws, engine, req.source_id, req.to_spec(), output_format=req.output_format
+        )
     except media_service.MediaNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except edit_service.EditValidationError as e:
@@ -48,14 +50,33 @@ def get_output(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+def _find_output(ws: Workspace, engine: MediaEngine, output_id: str) -> edit_service.EditOutput:
+    try:
+        return edit_service.get_output(ws, engine, output_id)
+    except edit_service.OutputNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @router.get("/outputs/{output_id}/content")
 def get_output_content(
     output_id: str,
     ws: Workspace = Depends(get_workspace),
     engine: MediaEngine = Depends(get_engine),
 ) -> FileResponse:
-    try:
-        output = edit_service.get_output(ws, engine, output_id)
-    except edit_service.OutputNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    """재생용: 브라우저가 파일을 '화면 안에서 열도록(inline)' 보낸다."""
+    output = _find_output(ws, engine, output_id)
     return FileResponse(output.path, filename=output.download_name, content_disposition_type="inline")
+
+
+@router.get("/outputs/{output_id}/download")
+def download_output(
+    output_id: str,
+    ws: Workspace = Depends(get_workspace),
+    engine: MediaEngine = Depends(get_engine),
+) -> FileResponse:
+    """다운로드용: 같은 파일이지만 '첨부파일(attachment)'로 보내서 브라우저가 저장하게 한다.
+
+    한글 파일 이름은 Content-Disposition 헤더의 filename*=utf-8''... 형식으로 자동 인코딩된다.
+    """
+    output = _find_output(ws, engine, output_id)
+    return FileResponse(output.path, filename=output.download_name, content_disposition_type="attachment")

@@ -2,7 +2,8 @@
 
 로컬 PC에서 노래·영상을 편집하는 AI 스튜디오 (React + FastAPI + FFmpeg + Demucs + faster-whisper).
 
-> 🚧 Step 0: 프로젝트 뼈대 + 프론트엔드 ↔ 백엔드 연결
+> ✅ Step 1 완료: 업로드 → 구간 자르기 · 볼륨 · 페이드 → MP4 / MP3 / WAV 다운로드
+> 🚧 다음: Step 2 (파형 표시 · Demucs 보컬/MR 분리 · 작업 대기열)
 
 ## 실행 방법
 
@@ -20,6 +21,16 @@ cd frontend
 npm install
 npm run dev   # → http://localhost:5173
 ```
+
+## 테스트
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt   # 최초 1회
+.\.venv\Scripts\python.exe -m pytest -v
+```
+
+테스트용 음원·영상은 FFmpeg로 즉석 생성하며, 볼륨/페이드는 `volumedetect`로 실제 음량을 측정해 검증한다.
 
 ## 구조
 

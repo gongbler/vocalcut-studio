@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 VOLUME_DB_RANGE = (-30.0, 20.0)
 MIN_LENGTH_SEC = 0.1
 
+VIDEO_FORMATS = {"mp4"}
+AUDIO_FORMATS = {"mp3", "wav"}
+OUTPUT_FORMATS = VIDEO_FORMATS | AUDIO_FORMATS
+
 
 class EditValidationError(Exception):
     """사용자가 입력한 편집 값이 잘못됨."""
@@ -31,8 +35,23 @@ class EditOutput:
     id: str
     source_id: str
     download_name: str  # 사용자에게 보여줄/저장될 이름 (예: 내 노래_edit.mp3)
+    format: str         # "mp4" | "mp3" | "wav"
     path: Path
     info: MediaInfo
+
+
+def resolve_format(requested: str | None, info: MediaInfo) -> str:
+    """출력 형식을 정한다. 지정하지 않으면 영상→mp4, 오디오→mp3."""
+    if requested is None:
+        return "mp4" if info.has_video else "mp3"
+    fmt = requested.lower()
+    if fmt not in OUTPUT_FORMATS:
+        raise EditValidationError(f"지원하지 않는 출력 형식입니다: {requested}")
+    if fmt in VIDEO_FORMATS and not info.has_video:
+        raise EditValidationError("오디오 파일은 MP4(영상)로 내보낼 수 없습니다. MP3 또는 WAV를 선택하세요.")
+    if fmt in AUDIO_FORMATS and not info.has_audio:
+        raise EditValidationError("소리가 없는 영상은 MP3/WAV로 내보낼 수 없습니다.")
+    return fmt
 
 
 def validate_spec(spec: EditSpec, duration: float) -> EditSpec:
@@ -68,12 +87,18 @@ def validate_spec(spec: EditSpec, duration: float) -> EditSpec:
     )
 
 
-def create_edit(ws: Workspace, engine: MediaEngine, source_id: str, spec: EditSpec) -> EditOutput:
+def create_edit(
+    ws: Workspace,
+    engine: MediaEngine,
+    source_id: str,
+    spec: EditSpec,
+    output_format: str | None = None,
+) -> EditOutput:
     source = media_service.get_media(ws, engine, source_id)  # 없으면 MediaNotFoundError
     spec = validate_spec(spec, source.info.duration_sec)
+    fmt = resolve_format(output_format, source.info)
 
-    # 출력 형식: 영상이면 MP4, 오디오면 MP3 (형식 선택은 1-4에서 추가)
-    ext = ".mp4" if source.info.has_video else ".mp3"
+    ext = f".{fmt}"
     stem = Path(source.original_name).stem or "output"
     download_name = f"{stem}_edit{ext}"
 
@@ -93,10 +118,14 @@ def create_edit(ws: Workspace, engine: MediaEngine, source_id: str, spec: EditSp
     ws.write_meta(out_dir, {
         "source_id": source_id,
         "download_name": download_name,
+        "format": fmt,
         "stored_name": dst.name,
         "spec": vars(spec),
     })
-    return EditOutput(id=output_id, source_id=source_id, download_name=download_name, path=dst, info=info)
+    return EditOutput(
+        id=output_id, source_id=source_id, download_name=download_name,
+        format=fmt, path=dst, info=info,
+    )
 
 
 def get_output(ws: Workspace, engine: MediaEngine, output_id: str) -> EditOutput:
@@ -109,6 +138,7 @@ def get_output(ws: Workspace, engine: MediaEngine, output_id: str) -> EditOutput
         id=output_id,
         source_id=meta["source_id"],
         download_name=meta["download_name"],
+        format=meta.get("format", path.suffix.lstrip(".")),  # 1-3 때 만든 결과물엔 format 이 없음
         path=path,
         info=engine.probe(path),
     )

@@ -1,5 +1,7 @@
 import { postJson } from "./errors";
 
+export type OutputFormat = "mp4" | "mp3" | "wav";
+
 export type EditRequest = {
   source_id: string;
   start_sec: number;
@@ -7,16 +9,19 @@ export type EditRequest = {
   volume_db: number;
   fade_in_sec: number;
   fade_out_sec: number;
+  output_format: OutputFormat;
 };
 
 export type EditOutput = {
   id: string;
   source_id: string;
   download_name: string;
+  format: OutputFormat;
   kind: "video" | "audio";
   duration_sec: number;
   size_bytes: number;
   content_url: string;
+  download_url: string;
 };
 
 export function createEdit(req: EditRequest): Promise<EditOutput> {
