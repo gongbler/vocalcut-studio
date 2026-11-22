@@ -5,8 +5,8 @@ import { cancelJob, JobCancelledError, waitForJob, type Job } from "../../api/jo
 import { getSubtitles, startTranscription, type Subtitles } from "../../api/subtitles";
 import JobProgress from "../../components/JobProgress";
 import { useElapsed } from "../../hooks/useElapsed";
-import { formatDuration } from "../../utils/format";
 import type { Stems } from "../separation/SeparationPanel";
+import SubtitleEditor from "./SubtitleEditor";
 
 type Props = {
   source: MediaFile;
@@ -50,7 +50,8 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
   const [job, setJob] = useState<Job | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(0); // 플레이어의 현재 재생 위치 (지금 나오는 줄 강조용)
+  const [generation, setGeneration] = useState(0); // 받아쓰기를 새로 할 때마다 +1
+  const [dirty, setDirty] = useState(false); // 편집기에 저장 안 한 변경이 있는지
   const elapsed = useElapsed(busy);
 
   useEffect(() => {
@@ -64,14 +65,9 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
     getSubtitles(source.id).then(setSubs).catch(() => undefined);
   }, [source.id]);
 
-  // 플레이어는 탭을 바꿀 때마다 새로 만들어지므로, 이벤트 대신 0.25초마다 위치를 읽는다 (간단하고 튼튼함)
-  useEffect(() => {
-    if (!subs) return;
-    const timer = setInterval(() => setNow(playerRef.current?.currentTime ?? 0), 250);
-    return () => clearInterval(timer);
-  }, [subs, playerRef]);
-
   const start = async () => {
+    if (dirty && !confirm("저장하지 않은 자막 수정이 있어요. 다시 받아 적으면 사라져요. 계속할까요?")) return;
+    if (subs?.edited && !dirty && !confirm("직접 고친 자막을 AI 결과로 덮어써요. 계속할까요?")) return;
     setBusy(true);
     setJob(null);
     setCancelling(false);
@@ -81,6 +77,7 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
       setJob(ticket);
       await waitForJob(ticket.id, setJob);
       setSubs(await getSubtitles(source.id));
+      setGeneration((g) => g + 1);
     } catch (err) {
       if (!(err instanceof JobCancelledError)) setError((err as Error).message);
     } finally {
@@ -92,13 +89,6 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
     if (!job) return;
     setCancelling(true);
     await cancelJob(job.id).catch(() => undefined);
-  };
-
-  const seek = (sec: number) => {
-    const player = playerRef.current;
-    if (!player) return;
-    player.currentTime = sec;
-    void player.play().catch(() => undefined);
   };
 
   return (
@@ -156,7 +146,7 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
         <>
           <p className="hint" style={{ marginTop: 14 }}>
             {subs.segments.length}줄 · 모델 {subs.model} · {languageName(subs.language)} ·{" "}
-            {subs.audio_source === "vocals" ? "보컬 트랙" : "원본 소리"}로 받아 적음 — 줄을 누르면 그 위치부터 재생돼요.
+            {subs.audio_source === "vocals" ? "보컬 트랙" : "원본 소리"}로 받아 적음 {subs.edited ? " · ✏️ 고친 자막" : ""} — ▶ 를 누르면 그 줄부터 재생돼요.
           </p>
           {subs.language_mismatch && (
             <p className="bad">
@@ -166,21 +156,15 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
             </p>
           )}
           {subs.segments.length === 0 && <p className="bad">⚠️ 받아 적은 말이 없어요. 언어 설정을 확인해 보세요.</p>}
-          <ol className="subtitle-list">
-            {subs.segments.map((s) => {
-              const playing = now >= s.start && now < s.end;
-              return (
-                <li key={s.id} className={playing ? "playing" : ""}>
-                  <button className="subtitle-line" onClick={() => seek(s.start)}>
-                    <span className="time">
-                      {formatDuration(s.start)} → {formatDuration(s.end)}
-                    </span>
-                    <span>{s.text}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
+          <SubtitleEditor
+            key={generation} // 새로 받아 적으면 편집기를 새 결과로 다시 시작
+            fileId={source.id}
+            duration={source.duration_sec}
+            initial={subs}
+            playerRef={playerRef}
+            onSaved={setSubs}
+            onDirtyChange={setDirty}
+          />
         </>
       )}
     </section>

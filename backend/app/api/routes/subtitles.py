@@ -38,7 +38,19 @@ class SubtitlesOut(BaseModel):
     model: str
     audio_source: str
     updated_at: float
+    edited: bool = False              # 사용자가 편집기에서 고친 적이 있는지
     segments: list[SubtitleLine]
+
+
+class SubtitleLineIn(BaseModel):
+    id: str | None = None             # 새로 추가한 줄은 없어도 된다
+    start: float
+    end: float
+    text: str = Field(max_length=1000)
+
+
+class SubtitlesIn(BaseModel):
+    segments: list[SubtitleLineIn]
 
 
 def _short(text: str, limit: int = 40) -> str:
@@ -100,3 +112,19 @@ def read_subtitles(file_id: str, ws: Workspace = Depends(get_workspace)) -> dict
     if data is None:
         raise HTTPException(status_code=404, detail="아직 자막이 없습니다.")
     return data
+
+
+@router.put("/files/{file_id}/subtitles", response_model=SubtitlesOut)
+def save_subtitles(
+    file_id: str,
+    body: SubtitlesIn,
+    ws: Workspace = Depends(get_workspace),
+    engine: MediaEngine = Depends(get_engine),
+) -> dict:
+    """편집기에서 고친 자막 저장 (줄 전체를 통째로 바꾼다)."""
+    try:
+        return subtitle_service.update_lines(ws, engine, file_id, [line.model_dump() for line in body.segments])
+    except media_service.MediaNotFoundError:
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+    except subtitle_service.SubtitleValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))

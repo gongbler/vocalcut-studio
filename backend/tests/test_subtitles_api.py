@@ -240,3 +240,56 @@ def test_language_mismatch_rule(chosen, detected, prob, expected):
     from app.services.subtitle_service import language_mismatch
 
     assert language_mismatch(chosen, detected, prob) == expected
+
+
+# ---------- 편집 후 저장 ----------
+
+def transcribed(client, song_id) -> dict:
+    wait_job(client, client.post("/api/transcriptions", json={"file_id": song_id}).json()["id"])
+    return client.get(f"/api/files/{song_id}/subtitles").json()
+
+
+def test_saving_edited_lines_keeps_ai_info(client, song_id):
+    subs = transcribed(client, song_id)
+    first, second = subs["segments"]
+    lines = [
+        {**second, "text": "  고친   두 번째\n줄 "},                 # 공백·줄바꿈 정리 대상
+        {**first, "start": 0.4},
+        {"start": 1.9, "end": 2.0, "text": "새로 추가한 줄"},        # id 없음 → 서버가 붙임
+    ]
+    res = client.put(f"/api/files/{song_id}/subtitles", json={"segments": lines})
+    assert res.status_code == 200, res.json()
+    saved = client.get(f"/api/files/{song_id}/subtitles").json()
+    assert [s["text"] for s in saved["segments"]] == ["첫 번째 줄", "고친 두 번째 줄", "새로 추가한 줄"]  # 시간순
+    assert saved["segments"][0]["start"] == 0.4 and saved["segments"][0]["id"] == first["id"]
+    assert len(saved["segments"][2]["id"]) == 12
+    assert saved["model"] == "small" and saved["edited"] is True   # AI 정보는 그대로, '고침' 표시
+
+
+@pytest.mark.parametrize("line,message", [
+    ({"start": 0.5, "end": 1.0, "text": "   "}, "비어 있어요"),
+    ({"start": 1.0, "end": 1.0, "text": "길이 0"}, "시간이 올바르지"),
+    ({"start": -1, "end": 1.0, "text": "음수"}, "시간이 올바르지"),
+    ({"start": 1.0, "end": 9.0, "text": "곡보다 김"}, "곡 길이"),       # 테스트 곡은 2초
+    ({"start": 0.0, "end": 1.0, "text": "가" * 201}, "너무 길어요"),
+])
+def test_invalid_lines_are_rejected_with_reason(client, song_id, line, message):
+    res = client.put(f"/api/files/{song_id}/subtitles", json={"segments": [line]})
+    assert res.status_code == 422
+    assert message in res.json()["detail"]
+
+
+def test_lines_can_be_written_by_hand_without_ai(client, song_id):
+    res = client.put(f"/api/files/{song_id}/subtitles", json={"segments": [{"start": 0, "end": 1, "text": "직접 쓴 줄"}]})
+    assert res.status_code == 200
+    assert res.json()["model"] == "manual"
+
+
+def test_saving_all_lines_deleted_is_allowed(client, song_id):
+    transcribed(client, song_id)
+    assert client.put(f"/api/files/{song_id}/subtitles", json={"segments": []}).status_code == 200
+    assert client.get(f"/api/files/{song_id}/subtitles").json()["segments"] == []
+
+
+def test_save_unknown_file_is_404(client):
+    assert client.put(f"/api/files/{'0' * 32}/subtitles", json={"segments": []}).status_code == 404

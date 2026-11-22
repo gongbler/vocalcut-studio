@@ -175,3 +175,48 @@ def language_mismatch(chosen: str | None, detected: str | None, probability: flo
     if probability < config.LANGUAGE_MISMATCH_PROB:
         return None  # AI 도 확신이 없으면 괜히 경고하지 않는다
     return {"chosen": chosen, "detected": detected}
+
+
+# ---------- 사용자가 고친 자막 저장 ----------
+
+MAX_LINES = 2000
+MAX_TEXT_CHARS = 200
+END_TOLERANCE_SEC = 0.5  # 마지막 줄이 곡 길이를 살짝 넘는 정도는 허용 (AI 시간도 이 정도는 어긋난다)
+
+
+def update_lines(ws: Workspace, engine: MediaEngine, file_id: str, lines: list[dict]) -> dict:
+    """편집기에서 고친 자막 줄들을 검사한 뒤 저장한다. (AI 정보 = 언어·모델은 그대로 둔다)
+
+    lines: [{"id": 선택, "start": 초, "end": 초, "text": 글자}, ...]
+    """
+    media = media_service.get_media(ws, engine, file_id)  # 없으면 MediaNotFoundError
+    if len(lines) > MAX_LINES:
+        raise SubtitleValidationError(f"자막은 최대 {MAX_LINES}줄까지 저장할 수 있어요.")
+    limit = media.info.duration_sec + END_TOLERANCE_SEC
+
+    cleaned = []
+    # 시간 순서로 정렬해서 검사 → 오류 메시지의 'N번째 줄'이 화면 순서와 같다
+    for n, line in enumerate(sorted(lines, key=lambda x: (x["start"], x["end"])), start=1):
+        text = " ".join(str(line["text"]).split())  # 앞뒤 공백·여러 칸 공백·줄바꿈 정리
+        start, end = round(float(line["start"]), 2), round(float(line["end"]), 2)
+        if not text:
+            raise SubtitleValidationError(f"{n}번째 줄({start:g}초)이 비어 있어요. 글자를 넣거나 줄을 삭제하세요.")
+        if len(text) > MAX_TEXT_CHARS:
+            raise SubtitleValidationError(f"{n}번째 줄이 너무 길어요 (최대 {MAX_TEXT_CHARS}자). 줄을 나눠 주세요.")
+        if start < 0 or end <= start:
+            raise SubtitleValidationError(f"{n}번째 줄의 시간이 올바르지 않아요 (끝 시간이 시작보다 뒤여야 해요).")
+        if end > limit:
+            raise SubtitleValidationError(f"{n}번째 줄이 곡 길이({media.info.duration_sec:.1f}초)를 넘어요.")
+        line_id = str(line.get("id") or "")
+        if not re.fullmatch(r"[0-9a-f]{1,32}", line_id):
+            line_id = uuid.uuid4().hex[:12]  # 새로 추가한 줄은 서버가 이름표를 붙인다
+        cleaned.append({"id": line_id, "start": start, "end": end, "text": text})
+
+    previous = get_subtitles(ws, file_id) or {
+        # AI 없이 처음부터 손으로 만든 자막
+        "language": "", "detected_language": None, "language_mismatch": None,
+        "model": "manual", "audio_source": "manual",
+    }
+    data = {**previous, "segments": cleaned, "updated_at": time.time(), "edited": True}
+    save_subtitles(ws, file_id, data)
+    return data
