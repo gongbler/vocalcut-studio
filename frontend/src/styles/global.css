@@ -147,3 +147,17 @@ button:hover { filter: brightness(1.1); }
 button:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
 button.secondary { background: transparent; border: 1px solid var(--accent); color: var(--text); }
 button.small { padding: 4px 10px; font-size: 12px; background: var(--border); }
+
+/* 자막 목록 */
+.field-grid > label select { align-self: start; } /* 옆 칸이 높아도 늘어나지 않게 */
+select {
+  background: #00000055; color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-size: 14px;
+}
+.subtitle-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; max-height: 360px; overflow-y: auto; }
+.subtitle-line {
+  width: 100%; text-align: left; display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px;
+  background: #0b0d11; color: var(--text); border: 1px solid transparent; border-radius: 8px; padding: 8px 10px;
+}
+.subtitle-line .time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.subtitle-list li.playing .subtitle-line { border-color: var(--accent); background: #7c5cff22; }

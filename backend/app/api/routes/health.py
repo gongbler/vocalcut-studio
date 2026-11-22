@@ -1,7 +1,7 @@
 """서버 상태 확인(Health Check) API.
 
 프론트엔드가 "서버 살아있어?"라고 물어보면 대답하는 창구.
-덤으로 FFmpeg, AI 보컬 분리를 쓸 수 있는지도 알려준다.
+덤으로 FFmpeg, AI 보컬 분리, AI 자막을 쓸 수 있는지도 알려준다.
 (보컬 분리 확인은 '설치 여부'만 본다 — torch 를 불러오지 않아 가볍다)
 """
 import platform
@@ -9,10 +9,10 @@ import shutil
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_separator, get_workspace
+from app.api.deps import get_separator, get_transcriber, get_workspace
 from app.core.config import APP_NAME, APP_VERSION
 from app.services import separation_service
-from app.services.engines.base import SeparatorEngine
+from app.services.engines.base import SeparatorEngine, TranscriberEngine
 from app.storage.workspace import Workspace
 
 router = APIRouter()
@@ -21,10 +21,12 @@ router = APIRouter()
 @router.get("/health")
 def health(
     separator: SeparatorEngine = Depends(get_separator),
+    transcriber: TranscriberEngine = Depends(get_transcriber),
     ws: Workspace = Depends(get_workspace),
 ) -> dict:
     ffmpeg_path = shutil.which("ffmpeg")  # PATH에서 ffmpeg 실행 파일을 찾는다
     sep = separator.availability()
+    asr = transcriber.availability()
     return {
         "status": "ok",
         "app": APP_NAME,
@@ -40,5 +42,12 @@ def health(
             "reason": sep.reason or None,
             # 이 PC에서 실제로 걸린 시간 ÷ 곡 길이 (기록이 없으면 null)
             "speed_ratio": separation_service.speed_ratio(ws),
+        },
+        "transcriber": {
+            "engine": transcriber.name,
+            "available": asr.ok,
+            "reason": asr.reason or None,
+            "models": [{"id": k, "label": v} for k, v in transcriber.models.items()],
+            "default_model": transcriber.default_model,
         },
     }

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.deps import get_workspace
-from app.api.routes import edits, files, health, jobs, mixes, separations
+from app.api.routes import edits, files, health, jobs, mixes, separations, subtitles
 from app.core.config import APP_NAME, APP_VERSION
 from app.jobs.manager import JobManager
 
@@ -35,3 +35,4 @@ app.include_router(edits.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
 app.include_router(separations.router, prefix="/api")
 app.include_router(mixes.router, prefix="/api")
+app.include_router(subtitles.router, prefix="/api")

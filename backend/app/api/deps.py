@@ -8,8 +8,8 @@ from fastapi import Request
 
 from app.core import config
 from app.jobs.manager import JobManager
-from app.services.engines.base import MediaEngine, SeparatorEngine
-from app.services.engines.registry import get_media_engine, get_separator_engine
+from app.services.engines.base import MediaEngine, SeparatorEngine, TranscriberEngine
+from app.services.engines.registry import get_media_engine, get_separator_engine, get_transcriber_engine
 from app.storage.workspace import Workspace
 
 
@@ -23,6 +23,10 @@ def get_engine() -> MediaEngine:
 
 def get_separator() -> SeparatorEngine:
     return get_separator_engine()
+
+
+def get_transcriber() -> TranscriberEngine:
+    return get_transcriber_engine()
 
 
 def get_job_manager(request: Request) -> JobManager:

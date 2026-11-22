@@ -65,6 +65,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-vad", action="store_true", help="무음 건너뛰기(VAD) 끄기")
     p.add_argument("--max-speech-sec", type=float, default=None,
                    help="VAD 가 한 덩어리로 묶는 소리의 최대 길이(초). 짧을수록 문장을 덜 빠뜨린다")
+    p.add_argument("--vad-threshold", type=float, default=None,
+                   help="VAD 가 '목소리'로 볼 확률 기준 (기본 0.5). 반주가 섞인 원곡은 낮춰야 노래를 덜 놓친다")
     p.add_argument("--word-timestamps", action="store_true", help="단어별 시간까지 계산")
     p.add_argument("--ffmpeg", default="ffmpeg")
     args = p.parse_args(argv)
@@ -85,13 +87,33 @@ def main(argv: list[str] | None = None) -> int:
         model = load_model(args.model, args.compute_type, args.threads)
         load_sec = time.monotonic() - started
 
+        vad_parameters = {k: v for k, v in (("max_speech_duration_s", args.max_speech_sec),
+                                            ("threshold", args.vad_threshold)) if v is not None} or None
+
+        # 언어 확인: 사용자가 언어를 골랐어도 '실제로 무슨 언어인지' 따로 들어 본다.
+        # 실측: 영어 노래를 '한국어'로 받아 적게 하면 AI 가 39초쯤에서 포기하고 나머지를 통째로 버렸다.
+        # → 고른 언어와 다르면 화면에서 경고한다. (목소리 구간만 최대 3조각(=90초) 들어 보고 판단)
+        emit(event="stage", name="detect_language")
+        try:
+            from faster_whisper.vad import VadOptions
+
+            # ⚠️ transcribe() 는 dict 도 받지만 detect_language() 는 VadOptions 객체만 받는다 (dict 면 조용히 실패)
+            detected, detected_prob, _ = model.detect_language(
+                audio, vad_filter=not args.no_vad, vad_parameters=VadOptions(**(vad_parameters or {})),
+                language_detection_segments=3,
+            )
+        except Exception as e:  # noqa: BLE001 — 목소리가 전혀 없는 파일 등: 감지 실패는 치명적이지 않다
+            emit(event="warning", message=f"언어 감지 실패: {e}"[:300])  # 조용히 삼키지 않고 로그에 남긴다
+            detected, detected_prob = None, 0.0
+        language = detected if args.language == "auto" else args.language
+
         emit(event="stage", name="transcribe", duration_sec=round(duration, 2))
         segments, info = model.transcribe(
             audio,
-            language=None if args.language == "auto" else args.language,
+            language=language,
             beam_size=args.beam_size,
             vad_filter=not args.no_vad,  # 반주만 나오는 구간(간주)을 건너뛴다
-            vad_parameters={"max_speech_duration_s": args.max_speech_sec} if args.max_speech_sec else None,
+            vad_parameters=vad_parameters,
             word_timestamps=args.word_timestamps,
             # 앞 문장을 힌트로 쓰지 않는다: 노래 후렴처럼 반복되는 가사에서
             # 같은 말을 끝없이 되풀이하는 오류(환각 반복)가 크게 줄어든다
@@ -106,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
             emit(event="progress", value=round(min(seg.end / duration, 1.0), 4))
 
         emit(event="done", language=info.language, language_probability=round(info.language_probability, 3),
+             detected_language=detected, detected_probability=round(float(detected_prob), 3),
              duration_sec=round(duration, 2), segments=count, load_sec=round(load_sec, 1),
              elapsed_sec=round(time.monotonic() - started, 1), peak_mb=round(peak_memory_mb()))
         return 0

@@ -8,7 +8,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from app.core import config
-from app.services.engines.base import EngineError, MediaEngine, SeparatorEngine
+from app.services.engines.base import EngineError, MediaEngine, SeparatorEngine, TranscriberEngine
 
 
 @lru_cache  # 엔진은 한 번만 만들어서 계속 재사용한다
@@ -28,3 +28,13 @@ def get_separator_engine() -> SeparatorEngine:
         from app.services.engines.separator.demucs_engine import DemucsSeparator
         return DemucsSeparator()
     raise EngineError(f"알 수 없는 분리 엔진: {name!r}")
+
+
+@lru_cache
+def get_transcriber_engine() -> TranscriberEngine:
+    name = config.TRANSCRIBER_ENGINE
+    if name == "whisper":
+        # whisper_engine 은 faster_whisper 를 import 하지 않는다 → 서버 메모리에 영향 없음
+        from app.services.engines.transcriber.whisper_engine import WhisperTranscriber
+        return WhisperTranscriber()
+    raise EngineError(f"알 수 없는 자막 엔진: {name!r}")

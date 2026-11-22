@@ -209,3 +209,63 @@ class SeparatorEngine(ABC):
 
         on_stage: 단계가 바뀔 때 화면에 보여줄 설명을 알려준다 (예: "AI 모델 불러오는 중").
         """
+
+
+# ---------- 자막 받아쓰기 엔진 규격서 ----------
+
+@dataclass(frozen=True)
+class TranscriptSegment:
+    """자막 한 줄: 시작/끝 시간(초)과 글자."""
+    start: float
+    end: float
+    text: str
+
+
+@dataclass(frozen=True)
+class Transcript:
+    language: str                         # 받아 적을 때 쓴 언어
+    segments: tuple[TranscriptSegment, ...]
+    detected_language: str | None = None  # AI 가 따로 들어 보고 판단한 실제 언어
+    detected_probability: float = 0.0     # 그 판단의 확신도 (0~1)
+
+
+class TranscriptionError(EngineError):
+    """받아쓰기 실패. user_message 는 화면에 그대로 보여줘도 되는 문장."""
+
+    def __init__(self, message: str, user_message: str) -> None:
+        super().__init__(message)
+        self.user_message = user_message
+
+
+class TranscriberEngine(ABC):
+    """자막 받아쓰기 엔진이 갖춰야 할 기능.
+
+    Whisper 를 다른 음성 인식 엔진(클라우드 API 등)으로 바꿀 때는 이 규격을 지키는 새 엔진만 만들면 된다.
+    """
+
+    name: str
+    models: dict[str, str]  # 고를 수 있는 모델 → 화면 설명 (예: {"small": "정확", "base": "빠름"})
+    default_model: str
+
+    @abstractmethod
+    def availability(self) -> Availability:
+        """사용 가능한지 '가볍게' 확인한다. (무거운 AI 라이브러리를 불러오면 안 된다)"""
+
+    @abstractmethod
+    def transcribe(
+        self,
+        src: Path,
+        model: str,
+        language: str | None = None,
+        on_progress: OnProgress | None = None,
+        on_stage: Callable[[str], None] | None = None,
+        on_segment: Callable[[TranscriptSegment], None] | None = None,
+        isolated_voice: bool = False,
+    ) -> Transcript:
+        """src 의 말/노래를 받아 적는다. language=None 이면 자동 감지.
+
+        isolated_voice: 반주 없이 목소리만 있는 소리(분리된 보컬)인지. 아니면 반주 속 노래를 놓치지 않게
+                        목소리 감지 기준을 낮춘다.
+
+        on_segment: 한 줄이 완성될 때마다 바로 알려준다 (화면에 '지금 받아 적는 중인 줄' 표시용).
+        """

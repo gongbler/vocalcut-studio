@@ -6,6 +6,7 @@ import ResultCard from "./features/editor/ResultCard";
 import ServerStatus from "./features/health/ServerStatus";
 import MixerPanel from "./features/mixer/MixerPanel";
 import SeparationPanel, { type Stems } from "./features/separation/SeparationPanel";
+import SubtitlePanel from "./features/subtitles/SubtitlePanel";
 import TrackTabs from "./features/tracks/TrackTabs";
 import MediaInfoCard from "./features/upload/MediaInfoCard";
 import UploadPanel from "./features/upload/UploadPanel";
@@ -61,6 +62,9 @@ export default function App() {
             />
           )}
         </>
+      )}
+      {source && source.audio && (
+        <SubtitlePanel key={`sub-${source.id}`} source={source} stems={stems} playerRef={playerRef} />
       )}
       {output && <ResultCard key={output.id} output={output} />}
     </main>

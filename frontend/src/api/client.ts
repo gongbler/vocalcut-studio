@@ -13,6 +13,13 @@ export type HealthResponse = {
     reason: string | null;
     speed_ratio: number | null; // 이 PC 실측: 걸린 시간 ÷ 곡 길이
   };
+  transcriber: {
+    engine: string;
+    available: boolean;
+    reason: string | null;
+    models: { id: string; label: string }[];
+    default_model: string;
+  };
 };
 
 export async function getHealth(): Promise<HealthResponse> {
