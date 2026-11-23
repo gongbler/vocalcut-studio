@@ -8,9 +8,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.deps import get_workspace
-from app.api.routes import edits, files, health, jobs, mixes, separations, subtitles
+from app.api.routes import edits, files, health, jobs, library, mixes, separations, subtitles
 from app.core.config import APP_NAME, APP_VERSION
 from app.jobs.manager import JobManager
+from app.services import library_service
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
 
@@ -20,6 +21,8 @@ async def lifespan(app: FastAPI):
     # 서버가 켜질 때: 작업 폴더를 준비하고, 작업 관리자(작업자 1명)를 만든다
     ws = get_workspace()
     ws.ensure()
+    # 강제 종료로 남은 임시 파일·오래된 작업 기록만 정리 (사용자 파일은 건드리지 않음)
+    library_service.startup_cleanup(ws)
     app.state.job_manager = JobManager(ws.jobs, max_workers=1)
     yield
     # 서버가 꺼질 때: 대기 중인 작업은 취소하고 작업자 정리
@@ -36,3 +39,4 @@ app.include_router(jobs.router, prefix="/api")
 app.include_router(separations.router, prefix="/api")
 app.include_router(mixes.router, prefix="/api")
 app.include_router(subtitles.router, prefix="/api")
+app.include_router(library.router, prefix="/api")

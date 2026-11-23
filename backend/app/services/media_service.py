@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -57,10 +58,16 @@ def register_file(
     except Exception:
         ws.remove_upload(file_id)
         raise
-    meta = {"original_name": display_name, "stored_name": dest.name, **(extra_meta or {})}
+    meta = {"original_name": display_name, "stored_name": dest.name, **_list_info(info), **(extra_meta or {})}
     ws.write_meta(upload_dir, meta)
     return MediaFile(id=file_id, original_name=display_name, path=dest, info=info,
                      derived_from=meta.get("derived_from"), stem=meta.get("stem"))
+
+
+def _list_info(info: MediaInfo) -> dict:
+    """'내 파일' 목록에 보여줄 정보. 목록을 열 때마다 파일을 다시 분석하지 않도록 meta 에 미리 적는다."""
+    return {"created_at": time.time(), "kind": "video" if info.has_video else "audio",
+            "duration_sec": info.duration_sec}
 
 
 def read_meta(ws: Workspace, file_id: str) -> dict:
@@ -108,7 +115,7 @@ def import_upload(
         ws.remove_upload(file_id)  # 실패하면 반쯤 저장된 파일을 치운다
         raise
 
-    ws.write_meta(upload_dir, {"original_name": filename, "stored_name": dest.name})
+    ws.write_meta(upload_dir, {"original_name": filename, "stored_name": dest.name, **_list_info(info)})
     return MediaFile(id=file_id, original_name=filename, path=dest, info=info)
 
 

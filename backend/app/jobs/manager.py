@@ -85,6 +85,11 @@ class JobManager:
             # 복사본을 돌려준다 → 바깥에서 고쳐도 원본이 망가지지 않음
             return Job.from_dict(job.to_dict()) if job else None
 
+    def has_active(self) -> bool:
+        """대기 중이거나 처리 중인 작업이 하나라도 있는지 (파일 삭제 전에 확인)."""
+        with self._lock:
+            return any(not j.status.finished for j in self._jobs.values())
+
     def shutdown(self, wait: bool = True) -> None:
         self._executor.shutdown(wait=wait, cancel_futures=True)
 
