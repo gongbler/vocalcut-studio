@@ -96,7 +96,8 @@ export default function App() {
 
   // 처음 열 때: 마지막으로 작업하던 파일이 아직 있으면 다시 연다
   useEffect(() => {
-    const last = recall();
+    // 주소에 ?file=<id> 가 있으면 그 파일을 연다 (즐겨찾기·README 화면 캡처용), 없으면 마지막 파일
+    const last = new URLSearchParams(location.search).get("file") ?? recall();
     if (!last) return;
     let ignore = false;
     listLibrary()

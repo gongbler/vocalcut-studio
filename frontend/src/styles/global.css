@@ -69,6 +69,7 @@ audio.player { background: transparent; }
 .field-grid .span-2 { grid-column: 1 / -1; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .row input { flex: 1; min-width: 0; }
+.row input[type="checkbox"], .row input[type="radio"] { flex: none; } /* 체크박스는 늘리지 않는다 (글자와 붙어 있게) */
 input[type="number"] {
   background: #00000055; color: var(--text);
   border: 1px solid var(--border); border-radius: 6px;
