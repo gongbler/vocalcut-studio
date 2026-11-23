@@ -11,7 +11,7 @@ def test_chunks_cover_everything_and_last_is_longer_than_overlap(total):
 
     assert chunks[0].start == 0
     assert chunks[-1].end == total                       # 끝까지 덮는다
-    for a, b in zip(chunks, chunks[1:]):
+    for a, b in zip(chunks, chunks[1:], strict=False):  # 이웃한 두 조각씩
         assert b.start == a.end - 10                     # 정확히 overlap 만큼 겹친다
     if len(chunks) > 1:
         assert chunks[-1].length > 10                    # 마지막 조각도 섞고 남는 부분이 있다

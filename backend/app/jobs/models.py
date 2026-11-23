@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     QUEUED = "queued"    # 대기 중 (앞 작업이 끝나길 기다림)
     RUNNING = "running"  # 처리 중
     DONE = "done"        # 완료

@@ -33,7 +33,7 @@ def test_srt_format_is_numbered_sorted_and_uses_comma_millis():
 def test_ass_matches_video_size_and_style():
     ass = to_ass(LINES, 1280, 720, SubtitleStyle(font_name="Malgun Gothic", size="large", position="top"))
     assert "PlayResX: 1280" in ass and "PlayResY: 720" in ass
-    style = next(l for l in ass.splitlines() if l.startswith("Style: Default"))
+    style = next(line for line in ass.splitlines() if line.startswith("Style: Default"))
     fields = style.split(",")
     assert fields[1] == "Malgun Gothic" and fields[2] == "58"               # 720 × 8% = 57.6 → 58px
     assert fields[18] == "8"                                                 # 8 = 위 가운데
@@ -42,7 +42,7 @@ def test_ass_matches_video_size_and_style():
 
 def test_ass_escapes_special_characters():
     """{ } \\ 는 ASS 에서 '서식 명령'이라 그대로 두면 가사가 사라진다 → 보기엔 같은 전각 문자로."""
-    dialogue = next(l for l in to_ass(LINES, 640, 360).splitlines() if "첫 줄" in l)
+    dialogue = next(line for line in to_ass(LINES, 640, 360).splitlines() if "첫 줄" in line)
     text = dialogue.split(",,", 1)[1]
     assert "{" not in text and "}" not in text and "\\" not in text
     assert "｛괄호｝" in text and "＼" in text

@@ -34,11 +34,11 @@ def create_edit(
             ws, engine, req.source_id, req.to_spec(), output_format=req.output_format
         )
     except media_service.MediaNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except edit_service.EditValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except EngineNotAvailableError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
     src = prepared.source.info
     disk_guard.require_free_space(ws.root, disk_guard.render_bytes(src.duration_sec, src.size_bytes), "편집")
@@ -61,14 +61,14 @@ def get_output(
     try:
         return EditOutputOut.from_output(edit_service.get_output(ws, engine, output_id))
     except edit_service.OutputNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 def _find_output(ws: Workspace, engine: MediaEngine, output_id: str) -> edit_service.EditOutput:
     try:
         return edit_service.get_output(ws, engine, output_id)
     except edit_service.OutputNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/outputs/{output_id}/content")

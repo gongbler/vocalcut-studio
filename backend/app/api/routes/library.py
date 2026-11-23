@@ -51,9 +51,9 @@ def delete_item(
     try:
         r = library_service.delete_item(ws, engine, file_id, busy=jobs.has_active())
     except media_service.MediaNotFoundError:
-        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.") from None
     except library_service.FileBusyError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
     return DeleteOut(**vars(r))
 
 

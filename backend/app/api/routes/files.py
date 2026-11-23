@@ -32,13 +32,13 @@ def upload_file(
     try:
         media = media_service.import_upload(ws, engine, file.filename or "", file.file)
     except media_service.UnsupportedFileError as e:
-        raise HTTPException(status_code=415, detail=str(e))
+        raise HTTPException(status_code=415, detail=str(e)) from e
     except FileTooLargeError as e:
-        raise HTTPException(status_code=413, detail=str(e))
+        raise HTTPException(status_code=413, detail=str(e)) from e
     except MediaProbeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except EngineNotAvailableError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail=str(e)) from e
     return MediaFileOut.from_media(media)
 
 
@@ -51,7 +51,7 @@ def get_file(
     try:
         media = media_service.get_media(ws, engine, file_id)
     except media_service.MediaNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     return MediaFileOut.from_media(media)
 
 
@@ -65,9 +65,9 @@ def get_file_peaks(
     try:
         peaks = media_service.get_peaks(ws, engine, file_id)
     except media_service.MediaNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except MediaProbeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
     return PeaksOut(duration_sec=peaks.duration_sec, peaks_per_sec=peaks.peaks_per_sec, values=peaks.values)
 
 
@@ -84,7 +84,7 @@ def get_file_content(
     try:
         media = media_service.get_media(ws, engine, file_id)
     except media_service.MediaNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     return FileResponse(media.path, filename=media.original_name, content_disposition_type="inline")
 
 
@@ -98,5 +98,5 @@ def download_file(
     try:
         media = media_service.get_media(ws, engine, file_id)
     except media_service.MediaNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     return FileResponse(media.path, filename=media.original_name, content_disposition_type="attachment")

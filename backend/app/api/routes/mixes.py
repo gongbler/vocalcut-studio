@@ -51,9 +51,9 @@ def create_mix(
             output_format=req.output_format, preview=req.preview,
         )
     except media_service.MediaNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except mix_service.MixValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
     length = (prepared.spec.end_sec or prepared.spec.mix_length) - prepared.spec.start_sec
     disk_guard.require_free_space(ws.root, disk_guard.render_bytes(length, 0), "믹스")

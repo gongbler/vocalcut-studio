@@ -96,7 +96,7 @@ def to_ass(lines: list[dict], width: int, height: int, style: SubtitleStyle = Su
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ])
     events = [
-        f"Dialogue: 0,{_ass_time(l['start'])},{_ass_time(l['end'])},Default,,0,0,0,,{_ass_text(str(l['text']))}"
-        for l in sorted(lines, key=lambda x: x["start"])
+        f"Dialogue: 0,{_ass_time(line['start'])},{_ass_time(line['end'])},Default,,0,0,0,,{_ass_text(str(line['text']))}"
+        for line in sorted(lines, key=lambda x: x["start"])
     ]
     return header + "\n" + "\n".join(events) + "\n"

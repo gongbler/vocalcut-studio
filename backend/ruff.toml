@@ -1,0 +1,20 @@
+# 파이썬 코드 검사 설정 (ruff).  실행: .\.venv\Scripts\python.exe -m ruff check .
+line-length = 120
+target-version = "py311"
+extend-exclude = ["workspace", "models"]
+
+[lint]
+select = [
+  "E", "W",   # 기본 문법·형식 (pycodestyle)
+  "F",        # 안 쓰는 import·변수, 정의 안 된 이름 (pyflakes)
+  "I",        # import 순서
+  "B",        # 흔한 버그 패턴 (bugbear)
+  "UP",       # 최신 파이썬 문법
+]
+ignore = [
+  "B008",     # FastAPI 의 Depends()/File() 기본값은 정상적인 사용법
+  "E501",     # 긴 줄: 한국어 주석은 폭이 넓어 줄 길이 검사가 맞지 않는다 (형식은 사람이 판단)
+]
+
+[lint.per-file-ignores]
+"tests/fakes/*" = ["E402"]   # 가짜 실행기는 경로 설정 뒤에 import 해야 한다

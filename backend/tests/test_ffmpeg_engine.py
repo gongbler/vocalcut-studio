@@ -8,7 +8,6 @@ from app.services.engines.media.ffmpeg_engine import FFmpegEngine, _parse_fps
 from app.services.engines.registry import get_media_engine
 from tests.conftest import requires_ffmpeg
 
-
 # ---------- 순수 함수 테스트 (FFmpeg 없이도 실행됨) ----------
 
 @pytest.mark.parametrize(

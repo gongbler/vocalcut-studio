@@ -9,8 +9,7 @@ from app.api.deps import get_engine, get_job_manager, get_transcriber, get_works
 from app.jobs.manager import JobManager, ProgressReporter, UserFacingError
 from app.schemas.job import JobOut
 from app.services import disk_guard, media_service, subtitle_service
-from app.services.engines.base import RenderError
-from app.services.engines.base import MediaEngine, TranscriberEngine, TranscriptionError, TranscriptSegment
+from app.services.engines.base import MediaEngine, RenderError, TranscriberEngine, TranscriptionError, TranscriptSegment
 from app.storage.workspace import Workspace
 
 router = APIRouter(tags=["subtitles"])
@@ -78,9 +77,9 @@ def create_transcription(
             ws, engine, transcriber, req.file_id, req.model, req.language, req.use_vocals
         )
     except media_service.MediaNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except subtitle_service.SubtitleValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
     def work(report: ProgressReporter) -> dict:
         last = {"progress": 0.0, "label": "준비 중"}
@@ -112,7 +111,7 @@ def read_subtitles(file_id: str, ws: Workspace = Depends(get_workspace)) -> dict
     try:
         data = subtitle_service.get_subtitles(ws, file_id)
     except media_service.MediaNotFoundError:
-        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.") from None
     if data is None:
         raise HTTPException(status_code=404, detail="아직 자막이 없습니다.")
     return data
@@ -129,9 +128,9 @@ def save_subtitles(
     try:
         return subtitle_service.update_lines(ws, engine, file_id, [line.model_dump() for line in body.segments])
     except media_service.MediaNotFoundError:
-        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.") from None
     except subtitle_service.SubtitleValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 
@@ -143,9 +142,9 @@ def download_srt(
     try:
         content, name = subtitle_service.export_srt(ws, engine, file_id)
     except media_service.MediaNotFoundError:
-        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.") from None
     except subtitle_service.SubtitleValidationError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     # 한글 파일 이름은 filename*=UTF-8''... 형식으로 보내야 깨지지 않는다 (filename 에는 영어 대체 이름)
     disposition = f"attachment; filename=\"subtitles.srt\"; filename*=UTF-8''{quote(name)}"
     return Response(content, media_type="application/x-subrip; charset=utf-8",
@@ -169,9 +168,9 @@ def create_burn(
     try:
         prepared = subtitle_service.prepare_burn(ws, engine, req.file_id, req.size, req.position)
     except media_service.MediaNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except subtitle_service.SubtitleValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
     media = prepared.media
     disk_guard.require_free_space(ws.root, disk_guard.render_bytes(media.info.duration_sec, media.info.size_bytes),

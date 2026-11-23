@@ -36,6 +36,7 @@ args = p.parse_args()
 
 # 진짜 실행기처럼 임시 폴더를 만들고, 자기 프로세스 번호를 적어 둔다 (취소 테스트용)
 import os  # noqa: E402
+
 Path(args.tmpdir).mkdir(parents=True, exist_ok=True)
 (Path(args.tmpdir) / "pid.txt").write_text(str(os.getpid()))
 

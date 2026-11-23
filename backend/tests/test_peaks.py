@@ -13,7 +13,6 @@ from app.services.engines.media.ffmpeg_engine import FFmpegEngine, _peaks_from_p
 from app.storage.workspace import Workspace
 from tests.conftest import FFMPEG, requires_ffmpeg
 
-
 # ---------- 순수 계산 (FFmpeg 불필요) ----------
 
 def test_peaks_from_pcm_takes_loudest_per_block():

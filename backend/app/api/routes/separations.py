@@ -31,9 +31,9 @@ def create_separation(
     try:
         source = separation_service.prepare(ws, engine, req.source_id)
     except media_service.MediaNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except separation_service.SeparationValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
     if not separation_service.cached_stems(ws, engine, source.id):  # 이미 분리했으면 공간이 더 필요 없음
         disk_guard.require_free_space(ws.root, disk_guard.separation_bytes(source.info.duration_sec), "보컬 분리")

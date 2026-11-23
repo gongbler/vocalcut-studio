@@ -11,13 +11,12 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-
-import shutil
 
 from app.core import config
 from app.services import edit_service, media_service, subtitle_formats

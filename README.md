@@ -5,7 +5,7 @@
 > ✅ Step 1 완료: 업로드 → 구간 자르기 · 볼륨 · 페이드 → MP4 / MP3 / WAV 다운로드
 > ✅ Step 2 완료: 작업 대기열 · 파형 구간 선택 · **AI 보컬/MR 분리** · **믹서**(트랙별 볼륨·싱크·3밴드 EQ, 리미터)
 > ✅ Step 3 완료: **AI 자동 자막**(언어 자동 감지, 분리된 보컬 활용) · **자막 편집기**(나누기·합치기·추가·되돌리기) · **내보내기**(SRT · 영상에 한글 자막 입히기)
-> 🚧 Step 4 진행 중: ✅ 한 번에 켜기/끄기(`start.cmd`) · ✅ **내 파일**(다시 열기 · 묶음 삭제 · 용량, 새로고침해도 이어서 작업) · ✅ 안정성(오류 번호 · 로그 파일 · 디스크 확인 · 화면 오류 경계)
+> 🚧 Step 4 진행 중: ✅ 한 번에 켜기/끄기(`start.cmd`) · ✅ **내 파일**(다시 열기 · 묶음 삭제 · 용량, 새로고침해도 이어서 작업) · ✅ 안정성(오류 번호 · 로그 파일 · 디스크 확인 · 화면 오류 경계) · ✅ 코드 품질(ruff · GitHub Actions CI)
 
 ## 실행 방법
 
@@ -61,11 +61,16 @@ cd backend
 cd backend
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt   # 최초 1회
 .\.venv\Scripts\python.exe -m pytest -v
+.\.venv\Scripts\python.exe -m ruff check .     # 코드 검사 (설정: backend/ruff.toml)
 
-# 프론트엔드 — 자막 편집 동작(나누기·합치기·추가·검사) 순수 함수 (vitest)
+# 프론트엔드 — 타입 검사 + 자막 편집 동작(나누기·합치기·추가·검사) 순수 함수 (vitest)
 cd frontend
+npx tsc -b
 npm.cmd test
 ```
+
+**자동 검사 (CI):** `.github/workflows/ci.yml` — GitHub 에 올리면(push/PR) Linux 빈 컴퓨터에서 위 검사를 처음부터 다시 돌린다.
+AI 패키지 없이 가짜 실행기로 검사하므로 몇 분 안에 끝난다. (윈도우 전용인 한글 글꼴 검사는 Linux 에서 자동으로 건너뜀)
 
 - 테스트용 음원·영상은 FFmpeg로 즉석 생성하며, 볼륨·페이드·싱크·EQ·리미터는 `volumedetect`로 실제 음량을 측정해 검증한다.
   - 구간 측정은 `-ss/-t` 대신 `atrim` 필터를 쓴다 (`-ss/-t`는 약 0.09초 덩어리 단위라 짧은 구간 측정이 부정확했음).
