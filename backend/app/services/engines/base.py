@@ -169,6 +169,21 @@ class MediaEngine(ABC):
     def render_mix(self, dst: Path, spec: MixSpec, on_progress: OnProgress | None = None) -> None:
         """여러 오디오 트랙을 spec 대로 섞어 dst 에 저장한다 (.mp3 / .wav)."""
 
+    @abstractmethod
+    def burn_subtitles(
+        self,
+        src: Path,
+        dst: Path,
+        subtitle_file: Path,
+        info: MediaInfo,
+        fonts_dir: Path | None = None,
+        on_progress: OnProgress | None = None,
+    ) -> None:
+        """src 영상에 subtitle_file(ASS) 자막을 그려 넣어 dst(.mp4)에 저장한다.
+
+        fonts_dir: 자막 글꼴 파일이 든 폴더 (한글 글꼴을 확실히 쓰기 위해). subtitle_file 과 같은 폴더 안에 둔다.
+        """
+
 
 # ---------- 보컬/MR 분리 엔진 규격서 ----------
 

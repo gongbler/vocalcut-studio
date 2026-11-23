@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { getHealth } from "../../api/client";
 import type { MediaFile } from "../../api/files";
 import { cancelJob, JobCancelledError, waitForJob, type Job } from "../../api/jobs";
@@ -6,12 +6,15 @@ import { getSubtitles, startTranscription, type Subtitles } from "../../api/subt
 import JobProgress from "../../components/JobProgress";
 import { useElapsed } from "../../hooks/useElapsed";
 import type { Stems } from "../separation/SeparationPanel";
+import type { EditOutput } from "../../api/edits";
 import SubtitleEditor from "./SubtitleEditor";
+import SubtitleExport from "./SubtitleExport";
 
 type Props = {
   source: MediaFile;
   stems: Stems | null;
   playerRef: RefObject<HTMLMediaElement | null>;
+  onRendered: (output: EditOutput) => void;
 };
 
 type Model = { id: string; label: string };
@@ -28,9 +31,10 @@ const languageName = (code: string | null) =>
   ({ ko: "한국어", en: "영어", ja: "일본어", zh: "중국어" })[code ?? ""] ?? code ?? "알 수 없음";
 
 // 이 PC(i5-4200M) 실측: 받아쓰기 시간 ÷ 곡 길이 (+ 모델 불러오기 몇 초)
+// small: 실제 곡 0.3~0.5배 (반주 많은 영상은 1배 가까이) → 조금 넉넉하게. base 는 그 절반 정도.
 const SPEED: Record<string, { ratio: number; load: number }> = {
-  small: { ratio: 0.8, load: 7 },
-  base: { ratio: 0.35, load: 4 },
+  small: { ratio: 0.6, load: 7 },
+  base: { ratio: 0.3, load: 4 },
 };
 
 function estimate(durationSec: number, model: string): string {
@@ -39,7 +43,7 @@ function estimate(durationSec: number, model: string): string {
   return sec < 60 ? `약 ${Math.max(10, Math.round(sec / 10) * 10)}초` : `약 ${Math.round(sec / 60)}분`;
 }
 
-export default function SubtitlePanel({ source, stems, playerRef }: Props) {
+export default function SubtitlePanel({ source, stems, playerRef, onRendered }: Props) {
   const [health, setHealth] = useState<{ ok: boolean; reason: string | null; models: Model[] } | null>(null);
   const [model, setModel] = useState("small");
   const [language, setLanguage] = useState("auto");
@@ -54,16 +58,37 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
   const [dirty, setDirty] = useState(false); // 편집기에 저장 안 한 변경이 있는지
   const elapsed = useElapsed(busy);
 
+  const pickedModel = useRef(false); // 사용자가 모델을 직접 골랐는지
+
   useEffect(() => {
+    // ⚠️ 응답이 늦게 도착할 수 있다 (개발 모드(StrictMode)는 이 effect 를 두 번 실행해 요청도 두 번 간다).
+    //    그 사이 사용자가 'base' 를 골랐는데 늦은 응답이 기본값(small)으로 덮어쓰던 버그가 있었다.
+    //    → 화면이 사라졌으면(ignore) 응답을 버리고, 사용자가 이미 골랐으면 기본값을 넣지 않는다.
+    let ignore = false;
     getHealth()
       .then((h) => {
+        if (ignore) return;
         setHealth({ ok: h.transcriber.available, reason: h.transcriber.reason, models: h.transcriber.models });
-        setModel(h.transcriber.default_model);
+        if (!pickedModel.current) setModel(h.transcriber.default_model);
       })
-      .catch(() => setHealth({ ok: false, reason: "서버에 연결할 수 없습니다.", models: [] }));
+      .catch(() => !ignore && setHealth({ ok: false, reason: "서버에 연결할 수 없습니다.", models: [] }));
     // 예전에 받아 둔 자막이 있으면 불러온다 (새로고침해도 다시 받아 적지 않게)
-    getSubtitles(source.id).then(setSubs).catch(() => undefined);
+    getSubtitles(source.id)
+      .then((s) => !ignore && setSubs(s))
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
   }, [source.id]);
+
+  /** AI 없이 빈 편집기로 시작 (AI 가 전혀 못 알아듣는 곡이나, 직접 가사를 아는 경우) */
+  const startManual = () => {
+    setSubs({
+      language: "", detected_language: null, language_mismatch: null, model: "manual",
+      audio_source: "manual", updated_at: Date.now() / 1000, segments: [],
+    });
+    setGeneration((g) => g + 1);
+  };
 
   const start = async () => {
     if (dirty && !confirm("저장하지 않은 자막 수정이 있어요. 다시 받아 적으면 사라져요. 계속할까요?")) return;
@@ -106,7 +131,10 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
           <div className="row">
             {(health?.models ?? []).map((m) => (
               <label key={m.id} className={`chip ${model === m.id ? "on" : ""}`}>
-                <input type="radio" name="asr-model" checked={model === m.id} onChange={() => setModel(m.id)} />
+                <input type="radio" name="asr-model" checked={model === m.id} onChange={() => {
+                    pickedModel.current = true;
+                    setModel(m.id);
+                  }} />
                 {m.id} · {m.label}
               </label>
             ))}
@@ -129,15 +157,23 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
               분리된 <b>보컬 트랙</b>으로 받아 적기 (반주가 없어 더 정확해요)
             </label>
           ) : (
-            <p className="hint">💡 노래라면 위에서 먼저 보컬/MR 분리를 하면 반주 없이 받아 적어 더 정확해요.</p>
+            <p className="hint">💡 노래라면 위에서 먼저 보컬/MR 분리를 하면 반주 없이 받아 적어 <b>가사도 시간도</b> 더 정확해요
+              (실측: 같은 곡 25줄 → 47줄).</p>
           )}
         </div>
       </div>
 
       {!busy && (
-        <button onClick={start} disabled={!health?.ok}>
-          {subs ? "🔁 다시 받아 적기 (지금 자막을 덮어써요)" : "💬 자막 만들기"}
-        </button>
+        <div className="row">
+          <button onClick={start} disabled={!health?.ok}>
+            {subs ? "🔁 다시 받아 적기 (지금 자막을 덮어써요)" : "💬 자막 만들기"}
+          </button>
+          {!subs && (
+            <button className="secondary" onClick={startManual} title="AI 없이 빈 편집기에서 직접 가사를 입력해요">
+              ✍️ 직접 쓰기
+            </button>
+          )}
+        </div>
       )}
       {busy && <JobProgress job={job} elapsed={elapsed} onCancel={cancel} cancelling={cancelling} />}
       {error && <p className="bad">❌ {error}</p>}
@@ -145,8 +181,16 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
       {subs && (
         <>
           <p className="hint" style={{ marginTop: 14 }}>
-            {subs.segments.length}줄 · 모델 {subs.model} · {languageName(subs.language)} ·{" "}
-            {subs.audio_source === "vocals" ? "보컬 트랙" : "원본 소리"}로 받아 적음 {subs.edited ? " · ✏️ 고친 자막" : ""} — ▶ 를 누르면 그 줄부터 재생돼요.
+            {[
+              `${subs.segments.length}줄`,
+              // 손으로 만든 자막에는 AI 모델·언어 정보가 없다
+              subs.audio_source !== "manual" && `모델 ${subs.model} · ${languageName(subs.language)}`,
+              { vocals: "보컬 트랙으로 받아 적음", original: "원본 소리로 받아 적음", manual: "직접 입력" }[subs.audio_source],
+              subs.edited && "✏️ 고친 자막",
+            ]
+              .filter(Boolean)
+              .join(" · ")}{" "}
+            — ▶ 를 누르면 그 줄부터 재생돼요.
           </p>
           {subs.language_mismatch && (
             <p className="bad">
@@ -155,7 +199,9 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
               언어를 <b>자동 감지</b>나 <b>{languageName(subs.language_mismatch.detected)}</b>로 바꿔 다시 받아 적으세요.
             </p>
           )}
-          {subs.segments.length === 0 && <p className="bad">⚠️ 받아 적은 말이 없어요. 언어 설정을 확인해 보세요.</p>}
+          {subs.segments.length === 0 && subs.audio_source !== "manual" && (
+            <p className="bad">⚠️ 받아 적은 말이 없어요. 언어 설정을 확인해 보세요.</p>
+          )}
           <SubtitleEditor
             key={generation} // 새로 받아 적으면 편집기를 새 결과로 다시 시작
             fileId={source.id}
@@ -165,6 +211,7 @@ export default function SubtitlePanel({ source, stems, playerRef }: Props) {
             onSaved={setSubs}
             onDirtyChange={setDirty}
           />
+          <SubtitleExport media={source} dirty={dirty} onRendered={onRendered} />
         </>
       )}
     </section>

@@ -64,7 +64,13 @@ export default function App() {
         </>
       )}
       {source && source.audio && (
-        <SubtitlePanel key={`sub-${source.id}`} source={source} stems={stems} playerRef={playerRef} />
+        <SubtitlePanel
+          key={`sub-${source.id}`}
+          source={source}
+          stems={stems}
+          playerRef={playerRef}
+          onRendered={setOutput}
+        />
       )}
       {output && <ResultCard key={output.id} output={output} />}
     </main>

@@ -17,8 +17,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+import shutil
+
 from app.core import config
-from app.services import media_service
+from app.services import edit_service, media_service, subtitle_formats
 from app.services.engines.base import (
     MediaEngine,
     OnProgress,
@@ -220,3 +222,78 @@ def update_lines(ws: Workspace, engine: MediaEngine, file_id: str, lines: list[d
     data = {**previous, "segments": cleaned, "updated_at": time.time(), "edited": True}
     save_subtitles(ws, file_id, data)
     return data
+
+
+
+# ---------- 내보내기: SRT 파일 / 영상에 입히기 ----------
+
+def _saved_lines(ws: Workspace, file_id: str) -> list[dict]:
+    data = get_subtitles(ws, file_id)
+    if not data or not data["segments"]:
+        raise SubtitleValidationError("내보낼 자막이 없어요. 먼저 자막을 만들거나 줄을 추가하세요.")
+    return data["segments"]
+
+
+def export_srt(ws: Workspace, engine: MediaEngine, file_id: str) -> tuple[bytes, str]:
+    """(SRT 파일 내용, 다운로드 이름). 파일 이름은 원곡 이름을 따른다: 내 노래.srt"""
+    media = media_service.get_media(ws, engine, file_id)
+    text = subtitle_formats.to_srt(_saved_lines(ws, file_id))
+    # UTF-8 + BOM(파일 맨 앞 표시 3바이트): 윈도우 메모장·일부 플레이어가 한글을 cp949 로 잘못 읽는 것을 막는다
+    return ("\ufeff" + text).encode("utf-8"), f"{Path(media.original_name).stem or 'subtitles'}.srt"
+
+
+@dataclass(frozen=True)
+class PreparedBurn:
+    media: media_service.MediaFile
+    lines: list[dict]
+    style: subtitle_formats.SubtitleStyle
+    download_name: str
+
+
+def prepare_burn(
+    ws: Workspace, engine: MediaEngine, file_id: str, size: str = "medium", position: str = "bottom"
+) -> PreparedBurn:
+    """빠른 검사 (대기열에 넣기 전에)."""
+    media = media_service.get_media(ws, engine, file_id)
+    if media.info.video is None:
+        raise SubtitleValidationError("영상이 없는 파일에는 자막을 입힐 수 없어요. SRT 파일로 저장하세요.")
+    if size not in subtitle_formats.SIZE_RATIO or position not in subtitle_formats.ALIGNMENT:
+        raise SubtitleValidationError("글자 크기/위치 값이 올바르지 않아요.")
+    lines = _saved_lines(ws, file_id)
+    style = subtitle_formats.SubtitleStyle(font_name=config.SUBTITLE_FONT_NAME, size=size, position=position)
+    return PreparedBurn(media, lines, style, f"{Path(media.original_name).stem or 'video'}_자막.mp4")
+
+
+def run_burn(
+    ws: Workspace, engine: MediaEngine, job: PreparedBurn, on_progress: OnProgress | None = None
+) -> edit_service.EditOutput:
+    """자막을 그려 넣은 새 영상을 만든다 (영상을 다시 인코딩하므로 영상 길이의 0.5~2배 걸린다)."""
+    video = job.media.info.video
+    assert video is not None
+    work = ws.temp / f"burn_{uuid.uuid4().hex}"
+    (work / "fonts").mkdir(parents=True)
+    output_id, out_dir = ws.create_output_dir()
+    dst = out_dir / "result.mp4"
+    try:
+        ass = work / "subs.ass"
+        ass.write_text(subtitle_formats.to_ass(job.lines, video.width, video.height, job.style), encoding="utf-8")
+        fonts_dir = None
+        if config.SUBTITLE_FONT_FILE.is_file():
+            shutil.copy(config.SUBTITLE_FONT_FILE, work / "fonts" / config.SUBTITLE_FONT_FILE.name)
+            fonts_dir = work / "fonts"
+        else:
+            logger.warning("subtitle font not found: %s (system fonts will be used)", config.SUBTITLE_FONT_FILE)
+        engine.burn_subtitles(job.media.path, dst, ass, job.media.info, fonts_dir=fonts_dir, on_progress=on_progress)
+        info = engine.probe(dst)
+    except BaseException:
+        ws.remove_output(output_id)
+        raise
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+    ws.write_meta(out_dir, {
+        "source_id": job.media.id, "download_name": job.download_name, "format": "mp4",
+        "stored_name": dst.name, "kind": "subtitled",
+    })
+    return edit_service.EditOutput(id=output_id, source_id=job.media.id, download_name=job.download_name,
+                                   format="mp4", path=dst, info=info)

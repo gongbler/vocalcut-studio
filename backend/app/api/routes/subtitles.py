@@ -1,11 +1,15 @@
 """자막 API: 받아쓰기 주문 + 저장된 자막 읽기."""
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_engine, get_job_manager, get_transcriber, get_workspace
 from app.jobs.manager import JobManager, ProgressReporter, UserFacingError
 from app.schemas.job import JobOut
 from app.services import media_service, subtitle_service
+from app.services.engines.base import RenderError
 from app.services.engines.base import MediaEngine, TranscriberEngine, TranscriptionError, TranscriptSegment
 from app.storage.workspace import Workspace
 
@@ -128,3 +132,54 @@ def save_subtitles(
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
     except subtitle_service.SubtitleValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+
+@router.get("/files/{file_id}/subtitles.srt")
+def download_srt(
+    file_id: str, ws: Workspace = Depends(get_workspace), engine: MediaEngine = Depends(get_engine)
+) -> Response:
+    """저장된 자막을 SRT 파일로 내려받기."""
+    try:
+        content, name = subtitle_service.export_srt(ws, engine, file_id)
+    except media_service.MediaNotFoundError:
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+    except subtitle_service.SubtitleValidationError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    # 한글 파일 이름은 filename*=UTF-8''... 형식으로 보내야 깨지지 않는다 (filename 에는 영어 대체 이름)
+    disposition = f"attachment; filename=\"subtitles.srt\"; filename*=UTF-8''{quote(name)}"
+    return Response(content, media_type="application/x-subrip; charset=utf-8",
+                    headers={"Content-Disposition": disposition})
+
+
+class BurnRequest(BaseModel):
+    file_id: str
+    size: Literal["small", "medium", "large"] = "medium"
+    position: Literal["bottom", "middle", "top"] = "bottom"
+
+
+@router.post("/subtitle-renders", response_model=JobOut, status_code=202)
+def create_burn(
+    req: BurnRequest,
+    ws: Workspace = Depends(get_workspace),
+    engine: MediaEngine = Depends(get_engine),
+    jobs: JobManager = Depends(get_job_manager),
+) -> JobOut:
+    """자막을 영상에 입히기 주문 → 번호표. 완료되면 result.output_id (편집 결과와 같은 형식)."""
+    try:
+        prepared = subtitle_service.prepare_burn(ws, engine, req.file_id, req.size, req.position)
+    except media_service.MediaNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except subtitle_service.SubtitleValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    def work(report: ProgressReporter) -> dict:
+        report(0.0, "자막 입히는 중")
+        try:
+            output = subtitle_service.run_burn(ws, engine, prepared, on_progress=lambda p: report(p, None))
+        except RenderError as e:
+            raise UserFacingError("자막을 입히지 못했습니다. 서버 로그를 확인하세요.") from e
+        return {"output_id": output.id}
+
+    job = jobs.submit("burn_subtitles", work, extra={"file_id": req.file_id})
+    return JobOut.from_job(job)

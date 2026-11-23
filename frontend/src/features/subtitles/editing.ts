@@ -52,13 +52,18 @@ export function mergeWithNext(lines: Line[], id: string): Line[] {
   return [...sorted.slice(0, i), merged, ...sorted.slice(i + 2)];
 }
 
-/** 재생 위치(at)에 빈 줄을 끼워 넣는다. 다음 줄과 겹치지 않게 길이를 줄인다 (기본 2초) */
+/**
+ * 재생 위치(at)에 빈 줄을 끼워 넣는다 (기본 2초).
+ * - 다음 줄과 겹치지 않게 길이를 줄인다.
+ * - 이미 있는 줄의 '중간'이면 그 줄을 at 에서 끝낸다 (3-3 테스트에서 겹침 경고가 뜨던 문제)
+ */
 export function insertLine(lines: Line[], at: number, duration: number): { lines: Line[]; id: string } {
   const start = round2(Math.max(0, Math.min(at, duration - 0.2)));
-  const next = sortLines(lines).find((l) => l.start > start + 0.3);
+  const trimmed = lines.map((l) => (l.start < start && l.end > start ? { ...l, end: start } : l));
+  const next = sortLines(trimmed).find((l) => l.start > start + 0.3);
   const end = round2(Math.min(start + 2, next ? next.start : Infinity, duration));
   const line = { id: newId(), start, end: Math.max(end, round2(start + 0.2)), text: "" };
-  return { lines: sortLines([...lines, line]), id: line.id };
+  return { lines: sortLines([...trimmed, line]), id: line.id };
 }
 
 export type Problem = "empty" | "time" | "overlap" | "beyond";

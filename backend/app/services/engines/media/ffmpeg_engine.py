@@ -106,7 +106,8 @@ class FFmpegEngine(MediaEngine):
         self._run_with_progress(cmd, Path(dst), total_sec=end - spec.start_sec, on_progress=on_progress)
 
     def _run_with_progress(
-        self, cmd: list[str], dst: Path, total_sec: float, on_progress: OnProgress | None
+        self, cmd: list[str], dst: Path, total_sec: float, on_progress: OnProgress | None,
+        cwd: Path | None = None,
     ) -> None:
         """FFmpeg를 실행하면서 진행률을 읽어 on_progress 로 알려준다.
 
@@ -119,7 +120,7 @@ class FFmpegEngine(MediaEngine):
         # 에러 메시지(stderr)는 임시 파일로 받는다.
         # (stdout 과 stderr 를 둘 다 파이프로 받으면, 안 읽는 쪽이 가득 차서 FFmpeg가 멈출 수 있다)
         with tempfile.TemporaryFile() as err_file:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err_file)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=err_file, cwd=cwd)
             deadline = time.monotonic() + RENDER_TIMEOUT_SEC
             try:
                 assert proc.stdout is not None
@@ -152,6 +153,22 @@ class FFmpegEngine(MediaEngine):
         cmd = build_mix_command(self.ffmpeg, Path(dst), spec)
         end = spec.end_sec if spec.end_sec is not None else spec.mix_length
         self._run_with_progress(cmd, Path(dst), total_sec=end - spec.start_sec, on_progress=on_progress)
+
+    # ------------------------------------------------------------------
+    def burn_subtitles(
+        self,
+        src: Path,
+        dst: Path,
+        subtitle_file: Path,
+        info: MediaInfo,
+        fonts_dir: Path | None = None,
+        on_progress: OnProgress | None = None,
+    ) -> None:
+        subtitle_file = Path(subtitle_file).resolve()
+        cmd = build_burn_command(self.ffmpeg, Path(src).resolve(), Path(dst).resolve(), subtitle_file, info, fonts_dir)
+        # 자막 폴더 '안에서' 실행 → 필터에는 짧은 상대 경로만 들어간다 (아래 build_burn_command 설명)
+        self._run_with_progress(cmd, Path(dst), total_sec=info.duration_sec, on_progress=on_progress,
+                                cwd=subtitle_file.parent)
 
     # ------------------------------------------------------------------
     def extract_peaks(self, path: Path, peaks_per_sec: float) -> Peaks:
@@ -381,3 +398,28 @@ def _parse_fps(rate: str | None) -> float | None:
     except (ValueError, ZeroDivisionError):
         return None
     return round(value, 3)
+
+
+def build_burn_command(
+    ffmpeg: str, src: Path, dst: Path, subtitle_file: Path, info: MediaInfo, fonts_dir: Path | None = None
+) -> list[str]:
+    r"""자막 입히기 명령. ⚠️ 자막 파일은 '필터 안'에 경로를 적어야 한다:  -vf "ass=파일:fontsdir=폴더"
+
+    필터 문법에서 ':' 는 옵션 구분, '\' 와 ',' '[' ']' 는 특수문자라서 C:\Users\내 폴더\자막.ass 같은 윈도우 경로는
+    여러 겹으로 이스케이프해야 하고 자주 깨진다. 그래서 자막 폴더를 '현재 폴더'로 두고 실행해
+    필터에는 특수문자가 없는 짧은 이름(subs.ass, fonts)만 넣는다. (입력/출력 파일은 -i 인자라 문제없음)
+    """
+    if not info.has_video:
+        raise RenderError("영상 트랙이 없는 파일에는 자막을 입힐 수 없습니다.")
+    vf = f"ass={subtitle_file.name}"
+    if fonts_dir is not None:
+        rel = Path(fonts_dir).resolve().relative_to(subtitle_file.parent)  # 같은 폴더 안이어야 한다
+        vf += f":fontsdir={rel.as_posix()}"
+    return [
+        ffmpeg, "-y", "-nostdin", "-v", "error",
+        "-i", str(src),
+        "-vf", vf,
+        "-map", "0:v:0", "-map", "0:a:0?",
+        *_VIDEO_ARGS,
+        str(dst),
+    ]

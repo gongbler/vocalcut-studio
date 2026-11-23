@@ -2,6 +2,7 @@
 
 설정을 한 곳에 모아두면, 나중에 경로나 엔진을 바꿀 때 이 파일만 고치면 된다.
 """
+import os
 from pathlib import Path
 
 APP_NAME = "VocalCut Studio"
@@ -36,6 +37,11 @@ WHISPER_VAD_THRESHOLD_MIXED = 0.2
 # 고른 언어와 감지된 언어가 다를 때, 감지 확신도가 이 이상이면 경고한다
 # (실측: 영어 노래 0.95 / 목소리 없는 MR 은 엉터리 감지 0.72 → 그 사이로 정함)
 LANGUAGE_MISMATCH_PROB = 0.8
+
+# 영상에 입히는 자막 글꼴. 글꼴 파일을 직접 지정해야 한글이 □□□ 로 나오지 않는다.
+# 맑은 고딕은 윈도우 기본 글꼴 (배포할 때는 라이선스가 자유로운 글꼴(예: 나눔고딕, Noto Sans KR)로 교체 검토)
+SUBTITLE_FONT_FILE = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "malgun.ttf"
+SUBTITLE_FONT_NAME = "Malgun Gothic"
 
 # 업로드 허용 확장자 (소문자, 점 포함)
 ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
