@@ -26,11 +26,14 @@ async def lifespan(app: FastAPI):
     ws = get_workspace()
     ws.ensure()
     # 강제 종료로 남은 임시 파일·오래된 작업 기록만 정리 (사용자 파일은 건드리지 않음)
-    library_service.startup_cleanup(ws)
+    cleaned = library_service.startup_cleanup(ws)
     app.state.job_manager = JobManager(ws.jobs, max_workers=1)
+    # 켜질 때마다 한 줄 남긴다 → app.log 가 비어 있으면 '기록이 안 되는 것'인지 바로 알 수 있다
+    logger.info("서버 시작 %s v%s · 작업 폴더 %s · 시작 정리 %s", APP_NAME, APP_VERSION, ws.root, cleaned)
     yield
     # 서버가 꺼질 때: 대기 중인 작업은 취소하고 작업자 정리
     app.state.job_manager.shutdown(wait=False)
+    logger.info("서버 종료")
 
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
