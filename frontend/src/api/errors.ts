@@ -11,6 +11,10 @@ export function errorMessage(body: unknown, status: number): string {
       .map((d: { loc?: unknown[]; msg?: string }) => `${d.loc?.at(-1) ?? ""}: ${d.msg ?? ""}`)
       .join(" / ");
   }
+  // 백엔드가 꺼져 있으면 화면 서버(Vite)의 프록시가 '빈 내용의 500'을 돌려준다 → 알아듣는 말로
+  if (body === null && status >= 500) {
+    return "백엔드 서버에 연결할 수 없습니다. 서버가 켜져 있는지 확인하세요 (start.cmd).";
+  }
   return `요청 실패 (HTTP ${status})`;
 }
 

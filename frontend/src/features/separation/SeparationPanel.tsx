@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
-import { getHealth } from "../../api/client";
+import { useState } from "react";
 import { getMedia, type MediaFile } from "../../api/files";
 import { cancelJob, JobCancelledError, waitForJob, type Job } from "../../api/jobs";
 import { startSeparation } from "../../api/separations";
 import JobProgress from "../../components/JobProgress";
 import { useElapsed } from "../../hooks/useElapsed";
+import { useHealth } from "../../hooks/useHealth";
 
 export type Stems = { vocals: MediaFile; instrumental: MediaFile };
 
@@ -23,25 +23,20 @@ function estimate(durationSec: number, ratio: number | null): string {
 }
 
 export default function SeparationPanel({ source, stems, onSeparated }: Props) {
-  const [available, setAvailable] = useState<{
-    ok: boolean;
-    reason: string | null;
-    ratio: number | null;
-  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const elapsed = useElapsed(busy);
 
-  // AI 분리 기능이 설치돼 있는지 서버에 물어본다 (서버는 '설치 여부'만 가볍게 확인)
-  useEffect(() => {
-    getHealth()
-      .then((h) =>
-        setAvailable({ ok: h.separator.available, reason: h.separator.reason, ratio: h.separator.speed_ratio }),
-      )
-      .catch(() => setAvailable({ ok: false, reason: "서버에 연결할 수 없습니다.", ratio: null }));
-  }, []);
+  // AI 분리 기능이 설치돼 있는지: 앱 전체가 공유하는 서버 상태에서 읽는다 (서버가 다시 켜지면 자동 갱신)
+  const health = useHealth();
+  const available =
+    health.kind === "ok"
+      ? { ok: health.data.separator.available, reason: health.data.separator.reason, ratio: health.data.separator.speed_ratio }
+      : health.kind === "offline"
+        ? { ok: false, reason: "서버에 연결할 수 없습니다.", ratio: null }
+        : null;
 
   const start = async () => {
     setBusy(true);

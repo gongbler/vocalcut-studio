@@ -29,3 +29,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.tsbuildinfo
+
+# --- start.ps1 가 기억하는 서버 창 번호 ---
+scripts/.pids
+
+# --- 서버 기록 (start.ps1 이 매번 새로 씀) ---
+logs/

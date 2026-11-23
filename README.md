@@ -11,18 +11,27 @@
 
 필수: Python 3.11, Node.js 20+, FFmpeg (PATH 등록)
 
+**처음 한 번만 설치:**
+
 ```powershell
-# 1) 백엔드 최초 설치 (한 번만)
-powershell -ExecutionPolicy Bypass -File .\scripts\setup-backend.ps1
-
-# 2) 백엔드 실행 → http://127.0.0.1:8000/docs
-powershell -ExecutionPolicy Bypass -File .\scripts\run-backend.ps1
-
-# 3) 프론트엔드 (새 터미널)
-cd frontend
-npm install
-npm run dev   # → http://localhost:5173
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-backend.ps1   # 백엔드 (.venv)
+cd frontend; npm.cmd install; cd ..                                     # 프론트엔드
 ```
+
+**실행 / 종료: 프로젝트 폴더의 `start.cmd` / `stop.cmd` 를 더블클릭** (또는 아래 명령)
+
+```powershell
+.\scripts\start.ps1   # 필수 프로그램 확인 → 서버 2개를 백그라운드로 실행 → 준비되면 브라우저 열기
+.\scripts\stop.ps1    # 서버 2개 끄기 (AI 작업 중이면 그 작업도 멈춤)
+```
+
+- 이미 켜져 있는 서버는 다시 켜지 않는다. 서버는 **창 없이** 돌고, 끌 때는 `stop.cmd`.
+  - 창으로 띄우지 않는 이유: PowerShell 창 안을 마우스로 한 번 클릭하면 '선택 모드'(빠른 편집)가 되어 그 안의 서버가 **멈춘다** (실제로 겪은 문제: 파란 빈 창 + 서버 연결 안 됨).
+- 서버 기록(오류 확인용): `logs\backend.log`, `logs\frontend.log` (+ `*.err.log`). 시작이 실패하면 start 가 마지막 줄을 보여준다.
+- 개발 중 서버 출력을 직접 보고 싶으면 예전처럼 `.\scripts\run-backend.ps1` / `cd frontend; npm.cmd run dev` 도 그대로 쓸 수 있다.
+- 화면: http://localhost:5173 · API 문서: http://127.0.0.1:8000/docs
+- 서버가 꺼지면 화면 위에 켜는 방법이 안내되고, 다시 켜지면 자동으로 이어진다 (3초마다 확인).
+- `npm` 대신 `npm.cmd` 를 쓰는 이유: PowerShell 실행 정책이 막혀 있으면 `npm`(= npm.ps1)이 실행되지 않는다.
 
 ### (선택) AI 보컬/MR 분리 설치
 
@@ -139,5 +148,5 @@ backend/    FastAPI (API 서버, 작업 큐, 엔진 서비스 계층)
   app/services/engines/   엔진 규격(base) + FFmpeg 엔진 + Demucs·Whisper 실행기(공통 조종기 runner_client)
   app/services/           서비스(주방장): 편집 · 분리 · 믹스 · 자막(받아쓰기·편집·SRT/ASS·입히기)
   tools/                  성능 측정 도구 (bench_separation.py, bench_transcription.py)
-scripts/    설치·실행 스크립트
+scripts/    설치·실행·종료 스크립트 (start.ps1 / stop.ps1, 루트의 start.cmd / stop.cmd 는 더블클릭용)
 ```

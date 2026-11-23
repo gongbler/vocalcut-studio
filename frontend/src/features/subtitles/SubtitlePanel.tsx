@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { getHealth } from "../../api/client";
 import type { MediaFile } from "../../api/files";
 import { cancelJob, JobCancelledError, waitForJob, type Job } from "../../api/jobs";
 import { getSubtitles, startTranscription, type Subtitles } from "../../api/subtitles";
 import JobProgress from "../../components/JobProgress";
 import { useElapsed } from "../../hooks/useElapsed";
+import { useHealth } from "../../hooks/useHealth";
 import type { Stems } from "../separation/SeparationPanel";
 import type { EditOutput } from "../../api/edits";
 import SubtitleEditor from "./SubtitleEditor";
@@ -44,7 +44,6 @@ function estimate(durationSec: number, model: string): string {
 }
 
 export default function SubtitlePanel({ source, stems, playerRef, onRendered }: Props) {
-  const [health, setHealth] = useState<{ ok: boolean; reason: string | null; models: Model[] } | null>(null);
   const [model, setModel] = useState("small");
   const [language, setLanguage] = useState("auto");
   const [useVocals, setUseVocals] = useState(true);
@@ -60,18 +59,24 @@ export default function SubtitlePanel({ source, stems, playerRef, onRendered }: 
 
   const pickedModel = useRef(false); // 사용자가 모델을 직접 골랐는지
 
+  // 서버 상태는 앱 전체가 공유한다 (서버가 다시 켜지면 자동 갱신)
+  const serverHealth = useHealth();
+  const health: { ok: boolean; reason: string | null; models: Model[] } | null =
+    serverHealth.kind === "ok"
+      ? { ok: serverHealth.data.transcriber.available, reason: serverHealth.data.transcriber.reason, models: serverHealth.data.transcriber.models }
+      : serverHealth.kind === "offline"
+        ? { ok: false, reason: "서버에 연결할 수 없습니다.", models: [] }
+        : null;
+  const defaultModel = serverHealth.kind === "ok" ? serverHealth.data.transcriber.default_model : null;
+
+  // ⚠️ 서버 상태가 '늦게' 도착할 수 있다. 그 사이 사용자가 'base' 를 골랐는데 늦은 응답이
+  //    기본값(small)으로 덮어쓰던 버그가 있었다 → 사용자가 이미 골랐으면 기본값을 넣지 않는다.
   useEffect(() => {
-    // ⚠️ 응답이 늦게 도착할 수 있다 (개발 모드(StrictMode)는 이 effect 를 두 번 실행해 요청도 두 번 간다).
-    //    그 사이 사용자가 'base' 를 골랐는데 늦은 응답이 기본값(small)으로 덮어쓰던 버그가 있었다.
-    //    → 화면이 사라졌으면(ignore) 응답을 버리고, 사용자가 이미 골랐으면 기본값을 넣지 않는다.
-    let ignore = false;
-    getHealth()
-      .then((h) => {
-        if (ignore) return;
-        setHealth({ ok: h.transcriber.available, reason: h.transcriber.reason, models: h.transcriber.models });
-        if (!pickedModel.current) setModel(h.transcriber.default_model);
-      })
-      .catch(() => !ignore && setHealth({ ok: false, reason: "서버에 연결할 수 없습니다.", models: [] }));
+    if (defaultModel && !pickedModel.current) setModel(defaultModel);
+  }, [defaultModel]);
+
+  useEffect(() => {
+    let ignore = false; // 화면이 사라진 뒤 도착한 응답은 버린다
     // 예전에 받아 둔 자막이 있으면 불러온다 (새로고침해도 다시 받아 적지 않게)
     getSubtitles(source.id)
       .then((s) => !ignore && setSubs(s))
