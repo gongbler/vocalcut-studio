@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from app.api.deps import get_engine, get_job_manager, get_separator, get_workspace
 from app.jobs.manager import JobManager, ProgressReporter, UserFacingError
 from app.schemas.job import JobOut
-from app.services import media_service, separation_service
+from app.services import disk_guard, media_service, separation_service
 from app.services.engines.base import MediaEngine, SeparationError, SeparatorEngine
 from app.storage.workspace import Workspace
 
@@ -34,6 +34,9 @@ def create_separation(
         raise HTTPException(status_code=404, detail=str(e))
     except separation_service.SeparationValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+    if not separation_service.cached_stems(ws, engine, source.id):  # 이미 분리했으면 공간이 더 필요 없음
+        disk_guard.require_free_space(ws.root, disk_guard.separation_bytes(source.info.duration_sec), "보컬 분리")
 
     def work(report: ProgressReporter) -> dict:
         last = {"progress": 0.0}

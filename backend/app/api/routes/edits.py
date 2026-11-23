@@ -9,7 +9,7 @@ from app.api.deps import get_engine, get_job_manager, get_workspace
 from app.jobs.manager import JobManager, ProgressReporter
 from app.schemas.edit import EditOutputOut, EditRequest
 from app.schemas.job import JobOut
-from app.services import edit_service, media_service
+from app.services import disk_guard, edit_service, media_service
 from app.services.engines.base import EngineNotAvailableError, MediaEngine
 from app.storage.workspace import Workspace
 
@@ -39,6 +39,9 @@ def create_edit(
         raise HTTPException(status_code=422, detail=str(e))
     except EngineNotAvailableError as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+    src = prepared.source.info
+    disk_guard.require_free_space(ws.root, disk_guard.render_bytes(src.duration_sec, src.size_bytes), "편집")
 
     def work(report: ProgressReporter) -> dict:
         report(0.0, "렌더링 중")

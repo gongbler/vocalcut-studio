@@ -3,9 +3,14 @@
 실제 노래 파일 대신, FFmpeg로 '삐-' 소리와 테스트 화면을 즉석에서 만들어 쓴다.
 → 저작권 걱정 없고, 저장소에 큰 파일을 올릴 필요도 없다.
 """
+import os
 import shutil
 import subprocess
 from pathlib import Path
+
+# 테스트 중 일부러 내는 오류가 실제 서버 기록(logs/app.log)에 섞이지 않게 파일 기록을 끈다
+# (app 을 import 하기 '전'에 설정해야 해서 맨 위에 둔다)
+os.environ.setdefault("VOCALCUT_LOG_FILE", "")
 
 import pytest
 

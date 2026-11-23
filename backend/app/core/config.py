@@ -43,6 +43,10 @@ LANGUAGE_MISMATCH_PROB = 0.8
 SUBTITLE_FONT_FILE = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "malgun.ttf"
 SUBTITLE_FONT_NAME = "Malgun Gothic"
 
+# 서버 기록 파일. VOCALCUT_LOG_FILE="" 이면 파일 기록을 끈다 (테스트용)
+_log = os.environ.get("VOCALCUT_LOG_FILE")
+LOG_FILE: Path | None = (BACKEND_DIR.parent / "logs" / "app.log") if _log is None else (Path(_log) if _log else None)
+
 # 업로드 허용 확장자 (소문자, 점 포함)
 ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
 ALLOWED_AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}

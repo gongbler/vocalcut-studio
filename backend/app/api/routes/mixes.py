@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from app.api.deps import get_engine, get_job_manager, get_workspace
 from app.jobs.manager import JobManager, ProgressReporter
 from app.schemas.job import JobOut
-from app.services import media_service, mix_service
+from app.services import disk_guard, media_service, mix_service
 from app.services.engines.base import MediaEngine
 from app.storage.workspace import Workspace
 
@@ -54,6 +54,9 @@ def create_mix(
         raise HTTPException(status_code=404, detail=str(e))
     except mix_service.MixValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+    length = (prepared.spec.end_sec or prepared.spec.mix_length) - prepared.spec.start_sec
+    disk_guard.require_free_space(ws.root, disk_guard.render_bytes(length, 0), "믹스")
 
     def work(report: ProgressReporter) -> dict:
         report(0.0, "미리듣기 만드는 중" if req.preview else "믹싱 중")

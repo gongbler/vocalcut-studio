@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { EditOutput } from "./api/edits";
 import { getMedia, type MediaFile } from "./api/files";
 import { listLibrary, type LibraryItem } from "./api/library";
+import ErrorBoundary from "./components/ErrorBoundary";
 import EditPanel from "./features/editor/EditPanel";
 import ResultCard from "./features/editor/ResultCard";
 import ServerStatus from "./features/health/ServerStatus";
@@ -118,41 +119,50 @@ export default function App() {
         <ServerStatus />
       </header>
 
-      <UploadPanel onUploaded={onUploaded} />
-      <LibraryPanel currentId={source?.id ?? null} refreshKey={libraryKey} onOpen={openItem} onDeleted={onDeleted} />
+      {/* 패널마다 '오류 경계'로 감싼다 → 한 패널에서 오류가 나도 그 패널만 안내로 바뀌고 나머지는 계속 쓸 수 있다.
+          key 는 경계에 둔다: 다른 파일을 열면 경계도 새로 만들어져 이전 오류 표시가 사라진다. */}
+      <ErrorBoundary name="파일 올리기">
+        <UploadPanel onUploaded={onUploaded} />
+      </ErrorBoundary>
+      <ErrorBoundary name="내 파일">
+        <LibraryPanel currentId={source?.id ?? null} refreshKey={libraryKey} onOpen={openItem} onDeleted={onDeleted} />
+      </ErrorBoundary>
       {openError && <p className="bad">❌ {openError}</p>}
       {source && active && (
         <>
-          <TrackTabs source={source} stems={stems} activeId={active.id} onSelect={setActive} />
-          <MediaInfoCard media={active} playerRef={playerRef} />
+          <ErrorBoundary key={`b-player-${active.id}`} name="플레이어">
+            <TrackTabs source={source} stems={stems} activeId={active.id} onSelect={setActive} />
+            <MediaInfoCard media={active} playerRef={playerRef} />
+          </ErrorBoundary>
           {/* key 가 바뀌면 React 가 패널을 새로 만든다 → 트랙을 바꿀 때마다 입력값 초기화.
               ⚠️ 같은 묶음 안의 key 는 서로 겹치면 안 된다. 원곡 탭에서는 active.id === source.id 라서
               앞에 'edit-' / 'sep-' 를 붙여 구분한다 (안 그러면 이전 패널이 지워지지 않고 쌓인다) */}
-          <EditPanel key={`edit-${active.id}`} media={active} playerRef={playerRef} onRendered={onRendered} />
+          <ErrorBoundary key={`edit-${active.id}`} name="자르기 · 볼륨 · 페이드">
+            <EditPanel media={active} playerRef={playerRef} onRendered={onRendered} />
+          </ErrorBoundary>
           {source.audio && (
-            <SeparationPanel key={`sep-${source.id}`} source={source} stems={stems} onSeparated={onSeparated} />
+            <ErrorBoundary key={`sep-${source.id}`} name="보컬 / MR 분리">
+              <SeparationPanel source={source} stems={stems} onSeparated={onSeparated} />
+            </ErrorBoundary>
           )}
           {source.audio && (
             // 분리가 끝나면 key 가 바뀌어 믹서가 'MR + 원곡 보컬' 구성으로 새로 시작한다
-            <MixerPanel
-              key={`mix-${source.id}-${stems?.vocals.id ?? "none"}`}
-              source={source}
-              stems={stems}
-              onRendered={onRendered}
-            />
+            <ErrorBoundary key={`mix-${source.id}-${stems?.vocals.id ?? "none"}`} name="믹서">
+              <MixerPanel source={source} stems={stems} onRendered={onRendered} />
+            </ErrorBoundary>
           )}
         </>
       )}
       {source && source.audio && (
-        <SubtitlePanel
-          key={`sub-${source.id}`}
-          source={source}
-          stems={stems}
-          playerRef={playerRef}
-          onRendered={onRendered}
-        />
+        <ErrorBoundary key={`sub-${source.id}`} name="자동 자막">
+          <SubtitlePanel source={source} stems={stems} playerRef={playerRef} onRendered={onRendered} />
+        </ErrorBoundary>
       )}
-      {output && <ResultCard key={output.id} output={output} />}
+      {output && (
+        <ErrorBoundary key={output.id} name="결과물">
+          <ResultCard output={output} />
+        </ErrorBoundary>
+      )}
     </main>
   );
 }

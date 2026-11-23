@@ -7,12 +7,13 @@
    일반 def 로 두면 FastAPI가 별도 작업자 스레드에서 실행해 주므로,
    업로드를 처리하는 동안에도 서버가 다른 요청(예: /api/health)에 응답할 수 있다.
 """
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from app.api.deps import get_engine, get_workspace
 from app.schemas.media import MediaFileOut, PeaksOut
 from app.services import media_service
+from app.services.disk_guard import require_free_space
 from app.services.engines.base import EngineNotAvailableError, MediaEngine, MediaProbeError
 from app.storage.workspace import FileTooLargeError, Workspace
 
@@ -21,10 +22,13 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 @router.post("", response_model=MediaFileOut, status_code=201)
 def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     ws: Workspace = Depends(get_workspace),
     engine: MediaEngine = Depends(get_engine),
 ) -> MediaFileOut:
+    # 업로드 크기(브라우저가 알려준 값)만큼 공간이 있는지 먼저 본다
+    require_free_space(ws.root, int(request.headers.get("content-length") or 0), "업로드")
     try:
         media = media_service.import_upload(ws, engine, file.filename or "", file.file)
     except media_service.UnsupportedFileError as e:

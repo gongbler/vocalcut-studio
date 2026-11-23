@@ -116,9 +116,10 @@ class JobManager:
         except UserFacingError as e:
             self._update(job_id, status=JobStatus.ERROR, error=str(e), message=None)
         except Exception:
-            logger.exception("job %s failed", job_id)  # 자세한 원인은 서버 로그에
+            error_id = uuid.uuid4().hex[:8]
+            logger.exception("job %s failed (error %s)", job_id, error_id)  # 자세한 원인은 서버 로그에
             self._update(job_id, status=JobStatus.ERROR, message=None,
-                         error="작업 중 오류가 발생했습니다. 서버 로그를 확인하세요.")
+                         error=f"작업 중 오류가 발생했습니다 (오류 번호 {error_id}). logs\\app.log 를 확인하세요.")
         else:
             self._update(job_id, status=JobStatus.DONE, progress=1.0, message="완료", result=result)
         finally:

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from app.api.deps import get_engine, get_job_manager, get_transcriber, get_workspace
 from app.jobs.manager import JobManager, ProgressReporter, UserFacingError
 from app.schemas.job import JobOut
-from app.services import media_service, subtitle_service
+from app.services import disk_guard, media_service, subtitle_service
 from app.services.engines.base import RenderError
 from app.services.engines.base import MediaEngine, TranscriberEngine, TranscriptionError, TranscriptSegment
 from app.storage.workspace import Workspace
@@ -172,6 +172,10 @@ def create_burn(
         raise HTTPException(status_code=404, detail=str(e))
     except subtitle_service.SubtitleValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+    media = prepared.media
+    disk_guard.require_free_space(ws.root, disk_guard.render_bytes(media.info.duration_sec, media.info.size_bytes),
+                                  "자막 입히기")
 
     def work(report: ProgressReporter) -> dict:
         report(0.0, "자막 입히는 중")
