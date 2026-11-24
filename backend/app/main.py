@@ -6,6 +6,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.deps import get_workspace
@@ -43,6 +45,25 @@ app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
 async def on_disk_full(request: Request, exc: InsufficientSpaceError) -> JSONResponse:
     # 507 Insufficient Storage: '저장 공간 부족'을 뜻하는 HTTP 상태 번호
     return JSONResponse(status_code=507, content={"detail": str(exc)})
+
+
+@app.exception_handler(RequestValidationError)
+async def on_invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """'잘못된 요청'(422) 안내. FastAPI 기본 처리와 내용은 같다.
+
+    다른 점: 요청에 깨진 글자(UTF-8 이 아닌 바이트)가 섞여 있으면 기본 처리는 그 글자를 답장에 그대로 넣으려다
+    UTF-8 변환에 실패해 500 이 났다. 여기서는 깨진 글자를 '?' 로 바꿔 넣는다.
+    """
+    def clean(value: object) -> object:
+        if isinstance(value, str):
+            return value.encode("utf-8", "replace").decode("utf-8")
+        if isinstance(value, dict):
+            return {clean(k): clean(v) for k, v in value.items()}
+        if isinstance(value, list | tuple):
+            return [clean(v) for v in value]
+        return value
+
+    return JSONResponse(status_code=422, content={"detail": clean(jsonable_encoder(exc.errors()))})
 
 
 @app.exception_handler(Exception)

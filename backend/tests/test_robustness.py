@@ -136,3 +136,15 @@ def test_log_file_rotates_and_is_utf8(tmp_path, monkeypatch):
                 root.removeHandler(h)
                 h.close()
     shutil.rmtree(log_file.parent, ignore_errors=True)
+
+
+def test_broken_character_in_invalid_request_gets_422_not_500(client):
+    """깨진 글자(짝 없는 surrogate 문자)가 섞인 잘못된 요청: 오류 안내 자체가 500 으로 터지지 않고 422 로 답한다.
+
+    예전에는 FastAPI 가 '잘못된 요청' 답장에 그 글자를 그대로 넣으려다 UTF-8 변환에 실패해 500 이 났다.
+    (한글을 cp949 로 잘못 읽은 스크립트가 json.dumps 로 보내면 이런 글자가 생긴다)
+    """
+    body = b'{"segments": [{"start": "x", "end": 1, "text": "\udcec"}]}'
+    r = client.put("/api/files/nope/subtitles", content=body, headers={"Content-Type": "application/json"})
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["loc"] == ["body", "segments", 0, "start"]
