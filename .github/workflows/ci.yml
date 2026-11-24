@@ -94,3 +94,40 @@ jobs:
       - name: Server log on failure
         if: failure()
         run: docker logs vocalcut
+
+  deploy:
+    # 모든 검사(+ Docker 안에서 실제 AI 점검)가 통과한 main 만 공개 데모 사이트에 올린다.
+    # GitHub 저장소 Settings → Secrets → HF_TOKEN (Hugging Face 쓰기 토큰) 이 있어야 동작한다.
+    name: Deploy to Hugging Face Space
+    needs: [docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: deploy-space        # 배포가 겹치지 않게 한 번에 하나씩
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Check token
+        id: token
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::warning::HF_TOKEN 비밀값이 없어 배포를 건너뜁니다 (Settings → Secrets and variables → Actions)."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload and wait for the Space to restart
+        if: steps.token.outputs.ok == 'true'
+        run: |
+          pip install huggingface_hub
+          python deploy/huggingface/deploy.py --wait
+
+      - name: Smoke test the live site
+        if: steps.token.outputs.ok == 'true'
+        run: python backend/tools/smoke_test.py https://gongbler-vocalcut-studio.hf.space
