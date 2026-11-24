@@ -6,7 +6,9 @@ Demucs 실행기와 Whisper 실행기가 똑같은 규칙을 쓰도록 여기 �
 from __future__ import annotations
 
 import json
+import os
 import sys
+from collections.abc import Callable
 
 
 def emit(**data) -> None:
@@ -52,3 +54,21 @@ def peak_memory_mb() -> float:
         return counters.PeakWorkingSetSize / 1024**2
     import resource
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # Linux: KB 단위
+
+
+def pick_device(cuda_available: Callable[[], bool], requested: str | None = None) -> str:
+    """AI 를 돌릴 장치를 고른다: 'cuda'(NVIDIA GPU) 또는 'cpu'.
+
+    VOCALCUT_DEVICE = auto(기본) | cpu | cuda. auto 면 GPU 가 있을 때만 GPU.
+    cuda_available 은 '물어볼 때만' 부른다 → CPU 로 고정하면 GPU 확인(드라이버 로딩)을 아예 하지 않는다.
+    """
+    requested = (requested or os.environ.get("VOCALCUT_DEVICE") or "auto").lower()
+    if requested == "cpu":
+        return "cpu"
+    try:
+        has_gpu = cuda_available()
+    except Exception:  # noqa: BLE001 — GPU 확인 자체가 실패하면 CPU
+        has_gpu = False
+    if requested == "cuda" and not has_gpu:
+        emit(event="log", message="VOCALCUT_DEVICE=cuda 이지만 GPU 를 찾지 못해 CPU 로 실행합니다.")
+    return "cuda" if has_gpu else "cpu"

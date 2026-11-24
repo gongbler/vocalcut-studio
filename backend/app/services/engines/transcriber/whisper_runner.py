@@ -24,7 +24,7 @@ import sys
 import time
 from pathlib import Path
 
-from app.services.engines.runner_utils import emit, peak_memory_mb
+from app.services.engines.runner_utils import emit, peak_memory_mb, pick_device
 
 SAMPLE_RATE = 16000  # Whisper 가 학습된 샘플레이트
 
@@ -43,9 +43,13 @@ def decode_audio(src: Path, ffmpeg: str):
 
 def load_model(name: str, compute_type: str, threads: int):
     """이미 받아 둔 모델이 있으면 인터넷에 접속하지 않고, 없을 때만 받는다."""
+    import ctranslate2
     from faster_whisper import WhisperModel
 
-    kwargs = dict(device="cpu", compute_type=compute_type, cpu_threads=threads)
+    device = pick_device(lambda: ctranslate2.get_cuda_device_count() > 0)
+    if device == "cuda" and compute_type == "int8":
+        compute_type = "int8_float16"  # GPU 에서는 int8 + float16 조합이 빠르고 메모리도 적다
+    kwargs = dict(device=device, compute_type=compute_type, cpu_threads=threads)
     try:
         return WhisperModel(name, local_files_only=True, **kwargs)
     except Exception:  # noqa: BLE001 — 캐시에 없음

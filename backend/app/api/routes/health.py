@@ -51,6 +51,8 @@ def health(
             "models": [{"id": k, "label": v} for k, v in transcriber.models.items()],
             "default_model": transcriber.default_model,
         },
+        # 영상에 자막을 입힐 한글 글꼴 (없으면 □□□ 로 나올 수 있다 → 배포 점검용)
+        "subtitle_font": {"name": config.SUBTITLE_FONT_NAME, "available": config.SUBTITLE_FONT_FILE.is_file()},
     }
 
 

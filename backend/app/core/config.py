@@ -43,8 +43,11 @@ MEDIA_ENGINE = "ffmpeg"
 SEPARATOR_ENGINE = "demucs"
 TRANSCRIBER_ENGINE = "whisper"
 
-# AI 모델 저장 폴더 (git 에는 올라가지 않음)
-MODELS_DIR = BACKEND_DIR / "models"
+# AI 모델 저장 폴더 (git 에는 올라가지 않음). Docker 에서는 이미지 안에 미리 받아 둔 폴더를 지정한다
+MODELS_DIR = Path(os.environ.get("VOCALCUT_MODELS") or BACKEND_DIR / "models")
+# AI 를 돌릴 장치: auto = NVIDIA GPU 가 있으면 GPU, 없으면 CPU (cpu / cuda 로 고정할 수도 있다)
+# 실행기(별도 프로세스)는 환경 변수를 물려받으므로, 여기서는 설명만 하고 실제 판단은 runner_utils.pick_device 가 한다
+DEVICE = os.environ.get("VOCALCUT_DEVICE", "auto")
 DEMUCS_MODEL = "htdemucs"
 # 한 번에 처리할 조각 길이(초). 실측: 30초 조각 ≈ 최대 750MB (RAM 4GB PC 기준으로 정함)
 DEMUCS_CHUNK_SEC = 30.0
@@ -63,9 +66,19 @@ WHISPER_VAD_THRESHOLD_MIXED = 0.2
 LANGUAGE_MISMATCH_PROB = 0.8
 
 # 영상에 입히는 자막 글꼴. 글꼴 파일을 직접 지정해야 한글이 □□□ 로 나오지 않는다.
-# 맑은 고딕은 윈도우 기본 글꼴 (배포할 때는 라이선스가 자유로운 글꼴(예: 나눔고딕, Noto Sans KR)로 교체 검토)
-SUBTITLE_FONT_FILE = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "malgun.ttf"
-SUBTITLE_FONT_NAME = "Malgun Gothic"
+# - 윈도우: 맑은 고딕 (윈도우 기본 글꼴)
+# - 리눅스 서버(Docker): 나눔고딕 (무료 공개 글꼴, apt 패키지 fonts-nanum)
+# VOCALCUT_SUBTITLE_FONT / VOCALCUT_SUBTITLE_FONT_NAME 으로 바꿀 수 있다
+if os.name == "nt":
+    _font_file, _font_name = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "malgun.ttf", "Malgun Gothic"
+else:
+    _font_file, _font_name = Path("/usr/share/fonts/truetype/nanum/NanumGothic.ttf"), "NanumGothic"
+SUBTITLE_FONT_FILE = Path(os.environ.get("VOCALCUT_SUBTITLE_FONT") or _font_file)
+SUBTITLE_FONT_NAME = os.environ.get("VOCALCUT_SUBTITLE_FONT_NAME") or _font_name
+
+# 미리 만들어 둔 화면(React 빌드 결과). 있으면 서버가 화면까지 한 주소에서 보여준다 (배포용).
+# 개발할 때는 없어도 된다 (화면은 Vite 개발 서버 5173 이 보여줌)
+FRONTEND_DIST = Path(os.environ.get("VOCALCUT_FRONTEND_DIST") or BACKEND_DIR.parent / "frontend" / "dist")
 
 # 서버 기록 파일. VOCALCUT_LOG_FILE="" 이면 파일 기록을 끈다 (테스트용)
 _log = os.environ.get("VOCALCUT_LOG_FILE")

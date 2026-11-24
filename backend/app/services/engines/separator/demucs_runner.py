@@ -33,7 +33,7 @@ import time
 import wave
 from pathlib import Path
 
-from app.services.engines.runner_utils import emit, peak_memory_mb  # 공통 도구
+from app.services.engines.runner_utils import emit, peak_memory_mb, pick_device  # 공통 도구
 
 SAMPLE_RATE = 44100  # Demucs 모델이 학습된 샘플레이트
 CHANNELS = 2
@@ -165,8 +165,9 @@ def main(argv: list[str] | None = None) -> int:
         mean, std = global_stats(frames)
 
         emit(event="stage", name="load_model")
+        device = pick_device(torch.cuda.is_available)  # GPU 가 있으면 GPU (C안 서버), 없으면 CPU
         model = get_model(args.model)
-        model.cpu().eval()
+        model.to(device).eval()
         names = list(model.sources)  # 예: ["drums", "bass", "other", "vocals"]
         vocal_idx = names.index("vocals")
 
@@ -189,10 +190,10 @@ def main(argv: list[str] | None = None) -> int:
             mix = (torch.from_numpy(piece) - mean) / std
             with torch.inference_mode():  # 학습용 기록을 끄고 추론만 → 메모리 절약
                 sources = apply_model(
-                    model, mix[None], device="cpu", shifts=0, split=True,
+                    model, mix[None], device=device, shifts=0, split=True,
                     overlap=0.25, progress=True, segment=args.segment, num_workers=0,
                 )[0]
-            sources = (sources * std + mean).numpy()
+            sources = (sources.cpu() * std + mean).numpy()
             vocals = sources[vocal_idx]
             instrumental = sources.sum(axis=0) - vocals  # 보컬을 뺀 나머지 전부 = MR
             last = chunk.index == len(chunks) - 1

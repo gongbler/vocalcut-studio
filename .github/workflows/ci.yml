@@ -60,3 +60,37 @@ jobs:
 
       - name: Tests (vitest)
         run: npm test
+
+  docker:
+    # Docker 상자를 실제로 만들고, 켜서, 사용자처럼 한 바퀴 써 본다 (AI 모델까지 상자 안에서 실행).
+    # 무거우므로 테스트가 모두 통과한 뒤에만 돈다.
+    name: Docker image (build + smoke test)
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build image
+        run: docker build -t vocalcut:ci .
+
+      - name: Start container
+        # CI 는 https 가 아니라서, https 전용 쿠키 설정(사이트 안에 넣기용)만 끈다
+        run: |
+          docker run -d --name vocalcut -p 7860:7860 -e VOCALCUT_COOKIE_CROSS_SITE=0 vocalcut:ci
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:7860/api/health > /dev/null && exit 0
+            sleep 2
+          done
+          docker logs vocalcut
+          exit 1
+
+      - name: Smoke test (upload, AI separation, AI subtitles, visitor isolation)
+        run: python3 backend/tools/smoke_test.py http://localhost:7860
+
+      - name: Image size
+        if: always()
+        run: docker image ls vocalcut:ci
+
+      - name: Server log on failure
+        if: failure()
+        run: docker logs vocalcut

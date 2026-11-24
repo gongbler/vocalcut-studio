@@ -21,6 +21,7 @@ from app.core.visitor import visitor_middleware
 from app.jobs.manager import JobManager
 from app.services import demo_cleanup, library_service
 from app.services.disk_guard import InsufficientSpaceError
+from app.web import mount_frontend
 
 setup_logging()
 logger = logging.getLogger("app")
@@ -120,3 +121,8 @@ app.include_router(separations.router, prefix="/api")
 app.include_router(mixes.router, prefix="/api")
 app.include_router(subtitles.router, prefix="/api")
 app.include_router(library.router, prefix="/api")
+
+# 배포용: 미리 만들어 둔 화면(frontend/dist)이 있으면 같은 주소에서 함께 보여준다.
+# ⚠️ 반드시 API 라우터 '뒤'에 등록한다 (모든 주소를 받는 규칙이라 앞에 두면 API 를 가로챈다)
+if mount_frontend(app, config.FRONTEND_DIST):
+    logger.info("화면 파일 제공: %s", config.FRONTEND_DIST)
