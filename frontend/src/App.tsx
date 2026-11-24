@@ -5,6 +5,7 @@ import { listLibrary, type LibraryItem } from "./api/library";
 import ErrorBoundary from "./components/ErrorBoundary";
 import EditPanel from "./features/editor/EditPanel";
 import ResultCard from "./features/editor/ResultCard";
+import DemoBanner from "./features/health/DemoBanner";
 import ServerStatus from "./features/health/ServerStatus";
 import LibraryPanel from "./features/library/LibraryPanel";
 import MixerPanel from "./features/mixer/MixerPanel";
@@ -119,6 +120,7 @@ export default function App() {
         <h1>🎙️ VocalCut Studio</h1>
         <ServerStatus />
       </header>
+      <DemoBanner />
 
       {/* 패널마다 '오류 경계'로 감싼다 → 한 패널에서 오류가 나도 그 패널만 안내로 바뀌고 나머지는 계속 쓸 수 있다.
           key 는 경계에 둔다: 다른 파일을 열면 경계도 새로 만들어져 이전 오류 표시가 사라진다. */}

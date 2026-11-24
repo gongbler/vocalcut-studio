@@ -2,6 +2,8 @@
 
 실행: (backend 폴더에서) uvicorn app.main:app --reload
 """
+import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 
@@ -12,12 +14,12 @@ from fastapi.responses import JSONResponse
 
 from app.api.deps import base_workspace
 from app.api.routes import edits, files, health, jobs, library, mixes, separations, subtitles
-from app.core import config
+from app.core import config, demo_limits
 from app.core.config import APP_NAME, APP_VERSION
 from app.core.logging_setup import new_error_id, setup_logging
 from app.core.visitor import visitor_middleware
 from app.jobs.manager import JobManager
-from app.services import library_service
+from app.services import demo_cleanup, library_service
 from app.services.disk_guard import InsufficientSpaceError
 
 setup_logging()
@@ -35,10 +37,28 @@ async def lifespan(app: FastAPI):
     # 켜질 때마다 한 줄 남긴다 → app.log 가 비어 있으면 '기록이 안 되는 것'인지 바로 알 수 있다
     logger.info("서버 시작 %s v%s · 작업 폴더 %s · 시작 정리 %s%s", APP_NAME, APP_VERSION, ws.root, cleaned,
                 " · 데모 모드" if config.DEMO_MODE else "")
+    cleaner = asyncio.create_task(_demo_cleanup_loop(ws, app.state.job_manager)) if config.DEMO_MODE else None
     yield
+    if cleaner:
+        cleaner.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await cleaner
     # 서버가 꺼질 때: 대기 중인 작업은 취소하고 작업자 정리
     app.state.job_manager.shutdown(wait=False)
     logger.info("서버 종료")
+
+
+async def _demo_cleanup_loop(ws, jobs: JobManager) -> None:
+    """데모 모드: 10분마다 1시간 지난 방문자 파일을 지운다 (작업 중인 방문자는 건너뜀)."""
+    while True:
+        try:
+            await asyncio.to_thread(
+                demo_cleanup.cleanup_visitors, ws.root, lambda owner: jobs.has_active(owner=owner),
+                config.DEMO_FILE_TTL_SEC,
+            )
+        except Exception:
+            logger.exception("demo cleanup failed")  # 정리가 실패해도 서버는 계속 돈다
+        await asyncio.sleep(config.DEMO_CLEANUP_INTERVAL_SEC)
 
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
@@ -50,6 +70,11 @@ app.middleware("http")(visitor_middleware)
 async def on_disk_full(request: Request, exc: InsufficientSpaceError) -> JSONResponse:
     # 507 Insufficient Storage: '저장 공간 부족'을 뜻하는 HTTP 상태 번호
     return JSONResponse(status_code=507, content={"detail": str(exc)})
+
+
+@app.exception_handler(demo_limits.DemoLimitError)
+async def on_demo_limit(request: Request, exc: demo_limits.DemoLimitError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
 
 @app.exception_handler(RequestValidationError)

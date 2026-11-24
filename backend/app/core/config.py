@@ -24,6 +24,20 @@ VISITOR_COOKIE_MAX_AGE = 7 * 24 * 3600
 # HTTPS 에서만 동작하므로 서버 배포 때만 켠다 (VOCALCUT_COOKIE_CROSS_SITE=1)
 COOKIE_CROSS_SITE = os.environ.get("VOCALCUT_COOKIE_CROSS_SITE") == "1"
 
+
+def _env_num(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    return float(value) if value else default
+
+
+# 데모 제한 (무료 공용 서버를 지키는 규칙, app/core/demo_limits.py). 더 큰 서버로 옮기면 숫자만 키운다.
+DEMO_MAX_UPLOAD_BYTES = int(_env_num("VOCALCUT_DEMO_MAX_UPLOAD_MB", 200) * 1024**2)
+DEMO_MAX_MEDIA_SEC = _env_num("VOCALCUT_DEMO_MAX_MEDIA_SEC", 5 * 60)      # 올릴 수 있는 파일 길이
+DEMO_MAX_AI_SEC = _env_num("VOCALCUT_DEMO_MAX_AI_SEC", 3 * 60)            # 보컬 분리·자막을 할 수 있는 길이
+DEMO_MAX_ACTIVE_JOBS = int(_env_num("VOCALCUT_DEMO_MAX_ACTIVE_JOBS", 3))  # 서버 전체 대기+처리 중 작업 수
+DEMO_FILE_TTL_SEC = _env_num("VOCALCUT_DEMO_FILE_TTL_MIN", 60) * 60       # 올린 파일 보관 시간
+DEMO_CLEANUP_INTERVAL_SEC = _env_num("VOCALCUT_DEMO_CLEANUP_INTERVAL_SEC", 600)
+
 # 사용할 엔진 이름. 엔진을 교체할 때는 이 값만 바꾼다.
 MEDIA_ENGINE = "ffmpeg"
 SEPARATOR_ENGINE = "demucs"

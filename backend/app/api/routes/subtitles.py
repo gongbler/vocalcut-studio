@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_engine, get_job_manager, get_transcriber, get_workspace
+from app.core import demo_limits
 from app.jobs.manager import JobManager, ProgressReporter, UserFacingError
 from app.schemas.job import JobOut
 from app.services import disk_guard, media_service, subtitle_service
@@ -80,6 +81,7 @@ def create_transcription(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except subtitle_service.SubtitleValidationError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+    demo_limits.check_ai_duration(prepared.target.info.duration_sec, "자동 자막")
 
     def work(report: ProgressReporter) -> dict:
         last = {"progress": 0.0, "label": "준비 중"}

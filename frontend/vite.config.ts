@@ -1,6 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+// Node 의 환경 변수 (이 파일만 Node 에서 실행된다). @types/node 를 따로 설치하지 않으려고 필요한 만큼만 선언
+declare const process: { env: Record<string, string | undefined> };
+
 export default defineConfig({
   plugins: [react()],
   server: {

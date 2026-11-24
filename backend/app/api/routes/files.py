@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from app.api.deps import get_engine, get_workspace
+from app.core import demo_limits
 from app.schemas.media import MediaFileOut, PeaksOut
 from app.services import media_service
 from app.services.disk_guard import require_free_space
@@ -30,7 +31,8 @@ def upload_file(
     # 업로드 크기(브라우저가 알려준 값)만큼 공간이 있는지 먼저 본다
     require_free_space(ws.root, int(request.headers.get("content-length") or 0), "업로드")
     try:
-        media = media_service.import_upload(ws, engine, file.filename or "", file.file)
+        media = media_service.import_upload(ws, engine, file.filename or "", file.file,
+                                            max_bytes=demo_limits.upload_max_bytes())
     except media_service.UnsupportedFileError as e:
         raise HTTPException(status_code=415, detail=str(e)) from e
     except FileTooLargeError as e:
@@ -39,6 +41,11 @@ def upload_file(
         raise HTTPException(status_code=422, detail=str(e)) from e
     except EngineNotAvailableError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+    try:
+        demo_limits.check_media_duration(media.info.duration_sec)
+    except demo_limits.DemoLimitError:
+        ws.remove_upload(media.id)  # 너무 긴 파일은 저장하지 않는다
+        raise
     return MediaFileOut.from_media(media)
 
 

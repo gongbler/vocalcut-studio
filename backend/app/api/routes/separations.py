@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.api.deps import get_engine, get_job_manager, get_separator, get_workspace
+from app.core import demo_limits
 from app.jobs.manager import JobManager, ProgressReporter, UserFacingError
 from app.schemas.job import JobOut
 from app.services import disk_guard, media_service, separation_service
@@ -36,6 +37,7 @@ def create_separation(
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     if not separation_service.cached_stems(ws, engine, source.id):  # 이미 분리했으면 공간이 더 필요 없음
+        demo_limits.check_ai_duration(source.info.duration_sec, "보컬 분리")
         disk_guard.require_free_space(ws.root, disk_guard.separation_bytes(source.info.duration_sec), "보컬 분리")
 
     def work(report: ProgressReporter) -> dict:

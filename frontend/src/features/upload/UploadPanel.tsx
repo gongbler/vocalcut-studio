@@ -1,5 +1,12 @@
 import { useRef, useState, type DragEvent } from "react";
 import { uploadFile, type MediaFile } from "../../api/files";
+import { getSession } from "../../session";
+
+/** 올릴 수 있는 크기 안내 (데모 사이트는 더 작게 제한) */
+const sizeHint = () => {
+  const l = getSession().limits;
+  return l ? `최대 ${l.upload_mb}MB · ${l.media_minutes}분` : "최대 2GB";
+};
 
 const ACCEPT = ".mp4,.mov,.mkv,.webm,.avi,.mp3,.wav,.m4a,.aac,.flac,.ogg";
 
@@ -62,7 +69,7 @@ export default function UploadPanel({ onUploaded }: Props) {
         ) : (
           <>
             <p>🎵 영상/오디오 파일을 끌어다 놓거나 클릭해서 선택</p>
-            <p className="hint">MP4, MOV, MKV, WEBM, MP3, WAV, M4A, FLAC 등 · 최대 2GB</p>
+            <p className="hint">MP4, MOV, MKV, WEBM, MP3, WAV, M4A, FLAC 등 · {sizeHint()}</p>
           </>
         )}
       </div>

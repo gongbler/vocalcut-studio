@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from app.core import demo_limits
 from app.jobs.models import Job, JobStatus
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,10 @@ class JobManager:
         """대기 중이거나 처리 중인 작업이 하나라도 있는지 (파일 삭제 전에 확인). owner 를 주면 그 방문자 것만."""
         with self._lock:
             return any(not j.status.finished and _owned(j, owner) for j in self._jobs.values())
+
+    def active_count(self, owner: str | None = None) -> int:
+        with self._lock:
+            return sum(1 for j in self._jobs.values() if not j.status.finished and _owned(j, owner))
 
     def for_owner(self, owner: str) -> OwnedJobs:
         """데모 모드: 이 방문자의 번호표만 보이는 창구를 돌려준다."""
@@ -183,6 +188,8 @@ class OwnedJobs:
         self.owner = owner
 
     def submit(self, kind: str, func: JobFunc, extra: dict[str, Any] | None = None) -> Job:
+        # 데모 줄 서기 규칙: 한 사람당 1개, 서버 전체 N개까지 (넘으면 DemoLimitError → 429)
+        demo_limits.check_queue(self.manager.active_count(), self.manager.active_count(self.owner))
         return self.manager.submit(kind, func, extra, owner=self.owner)
 
     def get(self, job_id: str) -> Job | None:
