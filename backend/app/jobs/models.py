@@ -30,6 +30,7 @@ class Job:
     created_at: float = 0.0
     updated_at: float = 0.0
     extra: dict[str, Any] = field(default_factory=dict)
+    owner: str | None = None       # 데모 모드: 주문한 방문자 번호 (평소에는 None). 화면에는 보내지 않는다
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

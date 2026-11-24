@@ -32,8 +32,11 @@ class FileTooLargeError(Exception):
 
 
 class Workspace:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, shared_root: Path | None = None) -> None:
         self.root = Path(root)
+        # 서버 전체가 함께 쓰는 기록(예: 보컬 분리 속도)을 두는 곳.
+        # 평소에는 root 와 같고, 데모 모드에서는 방문자 폴더가 아니라 공용 작업 폴더를 가리킨다.
+        self.shared_root = Path(shared_root) if shared_root is not None else self.root
         self.uploads = self.root / "uploads"
         self.temp = self.root / "temp"
         self.outputs = self.root / "outputs"

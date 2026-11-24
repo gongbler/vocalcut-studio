@@ -10,10 +10,12 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.api.deps import get_workspace
+from app.api.deps import base_workspace
 from app.api.routes import edits, files, health, jobs, library, mixes, separations, subtitles
+from app.core import config
 from app.core.config import APP_NAME, APP_VERSION
 from app.core.logging_setup import new_error_id, setup_logging
+from app.core.visitor import visitor_middleware
 from app.jobs.manager import JobManager
 from app.services import library_service
 from app.services.disk_guard import InsufficientSpaceError
@@ -25,13 +27,14 @@ logger = logging.getLogger("app")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 서버가 켜질 때: 작업 폴더를 준비하고, 작업 관리자(작업자 1명)를 만든다
-    ws = get_workspace()
+    ws = base_workspace()
     ws.ensure()
     # 강제 종료로 남은 임시 파일·오래된 작업 기록만 정리 (사용자 파일은 건드리지 않음)
     cleaned = library_service.startup_cleanup(ws)
     app.state.job_manager = JobManager(ws.jobs, max_workers=1)
     # 켜질 때마다 한 줄 남긴다 → app.log 가 비어 있으면 '기록이 안 되는 것'인지 바로 알 수 있다
-    logger.info("서버 시작 %s v%s · 작업 폴더 %s · 시작 정리 %s", APP_NAME, APP_VERSION, ws.root, cleaned)
+    logger.info("서버 시작 %s v%s · 작업 폴더 %s · 시작 정리 %s%s", APP_NAME, APP_VERSION, ws.root, cleaned,
+                " · 데모 모드" if config.DEMO_MODE else "")
     yield
     # 서버가 꺼질 때: 대기 중인 작업은 취소하고 작업자 정리
     app.state.job_manager.shutdown(wait=False)
@@ -39,6 +42,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
+# 데모 모드에서 방문자마다 번호표(쿠키)를 준다 (평소 모드에서는 그냥 통과)
+app.middleware("http")(visitor_middleware)
 
 
 @app.exception_handler(InsufficientSpaceError)

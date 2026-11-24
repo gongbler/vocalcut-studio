@@ -10,6 +10,7 @@ import shutil
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_separator, get_transcriber, get_workspace
+from app.core import config
 from app.core.config import APP_NAME, APP_VERSION
 from app.services import separation_service
 from app.services.engines.base import SeparatorEngine, TranscriberEngine
@@ -51,3 +52,13 @@ def health(
             "default_model": transcriber.default_model,
         },
     }
+
+
+@router.get("/session")
+def session() -> dict:
+    """화면이 처음 열릴 때 가장 먼저 부르는 주소.
+
+    데모 모드에서는 이 응답과 함께 방문자 번호표(쿠키)가 발급된다. 화면이 여러 요청을 동시에 보내기 전에
+    번호표를 먼저 받아 두어야, 요청마다 다른 번호가 생겨 파일이 흩어지는 일이 없다.
+    """
+    return {"demo": config.DEMO_MODE}

@@ -45,10 +45,11 @@ class JobManager:
         self._load_saved_jobs()
 
     # ---------------- 공개 기능 ----------------
-    def submit(self, kind: str, func: JobFunc, extra: dict[str, Any] | None = None) -> Job:
+    def submit(self, kind: str, func: JobFunc, extra: dict[str, Any] | None = None,
+               owner: str | None = None) -> Job:
         now = time.time()
         job = Job(id=uuid.uuid4().hex, kind=kind, created_at=now, updated_at=now,
-                  message="대기 중", extra=extra or {})
+                  message="대기 중", extra=extra or {}, owner=owner)
         with self._lock:
             self._jobs[job.id] = job
             self._cancel_flags[job.id] = threading.Event()
@@ -56,7 +57,7 @@ class JobManager:
         self._executor.submit(self._run, job.id, func)
         return self.get(job.id)
 
-    def cancel(self, job_id: str) -> Job | None:
+    def cancel(self, job_id: str, owner: str | None = None) -> Job | None:
         """작업 취소 요청.
 
         - 대기 중이면: 바로 '취소됨'으로 바꾼다 (차례가 와도 실행하지 않음)
@@ -67,7 +68,7 @@ class JobManager:
         with self._lock:
             job = self._jobs.get(job_id)
             flag = self._cancel_flags.get(job_id)
-            if job is None:
+            if job is None or not _owned(job, owner):
                 return None
             if job.status.finished or flag is None:
                 return Job.from_dict(job.to_dict())
@@ -79,16 +80,22 @@ class JobManager:
             self._update(job_id, message="취소하는 중…", persist=False)
         return self.get(job_id)
 
-    def get(self, job_id: str) -> Job | None:
+    def get(self, job_id: str, owner: str | None = None) -> Job | None:
         with self._lock:
             job = self._jobs.get(job_id)
+            if job is None or not _owned(job, owner):
+                return None
             # 복사본을 돌려준다 → 바깥에서 고쳐도 원본이 망가지지 않음
-            return Job.from_dict(job.to_dict()) if job else None
+            return Job.from_dict(job.to_dict())
 
-    def has_active(self) -> bool:
-        """대기 중이거나 처리 중인 작업이 하나라도 있는지 (파일 삭제 전에 확인)."""
+    def has_active(self, owner: str | None = None) -> bool:
+        """대기 중이거나 처리 중인 작업이 하나라도 있는지 (파일 삭제 전에 확인). owner 를 주면 그 방문자 것만."""
         with self._lock:
-            return any(not j.status.finished for j in self._jobs.values())
+            return any(not j.status.finished and _owned(j, owner) for j in self._jobs.values())
+
+    def for_owner(self, owner: str) -> OwnedJobs:
+        """데모 모드: 이 방문자의 번호표만 보이는 창구를 돌려준다."""
+        return OwnedJobs(self, owner)
 
     def shutdown(self, wait: bool = True) -> None:
         self._executor.shutdown(wait=wait, cancel_futures=True)
@@ -158,3 +165,31 @@ class JobManager:
                 job.error = "서버가 재시작되어 작업이 중단되었습니다. 다시 시도하세요."
                 self._write(job.id, job.to_dict())
             self._jobs[job.id] = job
+
+
+def _owned(job: Job, owner: str | None) -> bool:
+    """owner 가 None 이면(평소 모드) 모두 내 것, 아니면 주문한 방문자가 같아야 내 것."""
+    return owner is None or job.owner == owner
+
+
+class OwnedJobs:
+    """같은 주방(작업자)을 함께 쓰되, 이 방문자의 번호표만 보이고 취소할 수 있는 창구.
+
+    라우트 코드는 JobManager 와 똑같이 submit/get/cancel/has_active 를 부르면 되므로 고칠 필요가 없다.
+    """
+
+    def __init__(self, manager: JobManager, owner: str) -> None:
+        self.manager = manager
+        self.owner = owner
+
+    def submit(self, kind: str, func: JobFunc, extra: dict[str, Any] | None = None) -> Job:
+        return self.manager.submit(kind, func, extra, owner=self.owner)
+
+    def get(self, job_id: str) -> Job | None:
+        return self.manager.get(job_id, owner=self.owner)
+
+    def cancel(self, job_id: str) -> Job | None:
+        return self.manager.cancel(job_id, owner=self.owner)
+
+    def has_active(self) -> bool:
+        return self.manager.has_active(owner=self.owner)

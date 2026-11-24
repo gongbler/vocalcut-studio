@@ -12,7 +12,17 @@ APP_VERSION = "0.1.0"
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 # 업로드/임시/결과 파일이 저장될 작업 폴더 (git에는 올라가지 않음)
-WORKSPACE_DIR = BACKEND_DIR / "workspace"
+# VOCALCUT_WORKSPACE 로 바꿀 수 있다 (서버·Docker 에서는 쓰기 가능한 폴더를 지정)
+WORKSPACE_DIR = Path(os.environ.get("VOCALCUT_WORKSPACE") or BACKEND_DIR / "workspace")
+
+# 데모 모드 (여러 사람이 쓰는 공개 사이트용). VOCALCUT_DEMO=1 일 때만 켜진다.
+# 켜지면 방문자마다 보이지 않는 번호표(쿠키)를 주고, 방문자별 작업 폴더를 따로 쓴다.
+DEMO_MODE = os.environ.get("VOCALCUT_DEMO") == "1"
+VISITOR_COOKIE = "vocalcut_visitor"
+VISITOR_COOKIE_MAX_AGE = 7 * 24 * 3600
+# 다른 사이트 안에(iframe) 넣어 보여줄 때(예: huggingface.co 페이지) 쿠키가 막히지 않게 하는 설정.
+# HTTPS 에서만 동작하므로 서버 배포 때만 켠다 (VOCALCUT_COOKIE_CROSS_SITE=1)
+COOKIE_CROSS_SITE = os.environ.get("VOCALCUT_COOKIE_CROSS_SITE") == "1"
 
 # 사용할 엔진 이름. 엔진을 교체할 때는 이 값만 바꾼다.
 MEDIA_ENGINE = "ffmpeg"

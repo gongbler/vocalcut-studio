@@ -46,7 +46,7 @@ def record_speed(ws: Workspace, elapsed: float, audio_sec: float) -> None:
     """이번 분리가 '곡 길이의 몇 배' 걸렸는지 저장한다."""
     if audio_sec < 30:  # 짧은 곡은 모델 불러오는 시간 비중이 커서(실측 10초 곡 3.7~3.9배) 기준으로 부적절
         return
-    path = ws.root / SPEED_FILE
+    path = ws.shared_root / SPEED_FILE
     try:
         ratios = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -58,7 +58,7 @@ def record_speed(ws: Workspace, elapsed: float, audio_sec: float) -> None:
 def speed_ratio(ws: Workspace) -> float | None:
     """최근 기록의 중앙값 (기록이 없으면 None). 중앙값은 한 번 유난히 느렸던 기록에 덜 흔들린다."""
     try:
-        ratios = sorted(json.loads((ws.root / SPEED_FILE).read_text(encoding="utf-8")))
+        ratios = sorted(json.loads((ws.shared_root / SPEED_FILE).read_text(encoding="utf-8")))
     except (OSError, ValueError):
         return None
     if not ratios:
