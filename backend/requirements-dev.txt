@@ -3,3 +3,4 @@
 pytest>=8.0
 httpx>=0.27   # FastAPI TestClient가 내부적으로 사용
 ruff==0.17.6  # 코드 검사 (ruff.toml)
+numpy==2.4.6  # 분리 조각 나누기(chunking) 테스트용 — requirements-ai.txt 와 같은 버전

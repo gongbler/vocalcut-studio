@@ -84,7 +84,8 @@ def pid_alive(pid: int) -> bool:
     import os
     import subprocess
     if sys.platform == "win32":
-        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True).stdout
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True,
+                             errors="replace").stdout  # 한국어 Windows 출력도 깨지지 않게
         return str(pid) in out
     try:
         os.kill(pid, 0)
