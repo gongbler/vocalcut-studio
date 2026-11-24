@@ -2,12 +2,17 @@
 
 **저사양 Windows PC(RAM 4GB · GPU 없음)에서 돌아가는 로컬 AI 노래·영상 편집 스튜디오.**
 노래에서 보컬과 반주를 AI로 나누고, 내 목소리를 섞어 커버곡을 만들고, 가사 자막을 AI로 받아 적어 영상에 입힌다.
-모든 처리는 내 PC 안에서 끝난다 (파일을 외부 서버로 보내지 않음).
+내 PC 에서 실행하면 모든 처리가 PC 안에서 끝나고(파일을 외부 서버로 보내지 않음), 같은 코드를 **공개 데모 사이트**로도 운영한다.
+
+### ▶ 직접 써 보기: **https://gongbler-vocalcut-studio.hf.space**
+설치 없이 브라우저에서 업로드 → AI 보컬 분리 → AI 자막 → 편집까지. (체험용: 내 파일은 나만 보이고 약 60분 뒤 자동 삭제 · 한동안 아무도 안 쓰면 서버가 잠들어 첫 접속이 1~2분 걸릴 수 있음)
 
 > **TL;DR (EN)** — A local, privacy-first AI studio for song covers: Demucs vocal/instrumental separation,
 > a multi-track mixer, faster-whisper lyric transcription with an editor, and Korean-safe subtitle burn-in.
 > Built with React + FastAPI + FFmpeg and engineered to run on a 4 GB RAM, CPU-only laptop:
 > AI runs in isolated subprocesses, audio is processed in constant-memory chunks, and every model/threshold choice is backed by on-device measurements.
+> The same code runs as a public multi-visitor demo on Hugging Face Spaces (Docker, CPU): per-visitor isolation, usage limits, 1-hour auto-delete,
+> and a CI job that builds the image and runs real AI jobs inside it before anything ships.
 
 ![전체 화면: 내 파일 · 트랙 탭(원곡/보컬/MR) · 플레이어](docs/images/01-overview.png)
 
@@ -74,6 +79,29 @@ cd backend
 
 모델은 `backend/models/` 에 저장되고, 한 번 받은 뒤에는 인터넷 없이 동작한다.
 </details>
+
+## 공개 데모 사이트 (Hugging Face Spaces)
+
+한 사람이 쓰던 '내 방 작업실'을 여러 사람이 동시에 쓰는 '공용 체험관'으로 바꾼 부분. 스위치 `VOCALCUT_DEMO=1` 일 때만 켜지고, 꺼 두면 PC 버전과 똑같이 동작한다.
+
+| 문제 | 해결 |
+|---|---|
+| 남이 올린 노래가 '내 파일'에 보이고 지울 수도 있음 | 처음 온 방문자에게 보이지 않는 번호표(httpOnly 쿠키) → 번호마다 작업 폴더·작업 목록을 따로 (`deps.get_workspace`, `OwnedJobs`). 라우트 코드는 그대로 |
+| 화면이 요청을 동시에 보내면 요청마다 다른 번호가 생김 | 화면을 그리기 **전에** `/api/session` 으로 번호표부터 받음 |
+| 무료 CPU 서버가 긴 파일·많은 작업에 멈출 수 있음 | 업로드 200MB·5분, AI 작업 3분, 1인 1작업, 서버 전체 3작업 (413/429 + 한국어 안내). 숫자는 환경 변수 |
+| 올린 파일이 계속 쌓임 · 저작권 | 10분마다 60분 지난 파일 삭제(작업 중인 방문자는 건너뜀) + 화면 안내 띠 |
+| 화면(5173)과 서버(8000)가 따로 | 빌드한 화면을 FastAPI 가 직접 제공 → 주소 하나 (`app/web.py`) |
+| '내 PC 에서만 되는' 배포 | `Dockerfile` 에 FFmpeg·한글 글꼴(나눔고딕)·AI 모델까지 포함 → **CI 가 이미지를 만들고 켜서 업로드·AI 분리·AI 자막·방문자 격리를 실제로 실행**(`tools/smoke_test.py`) |
+| 나중에 GPU 서버로 이전 | `VOCALCUT_DEVICE=auto` 가 GPU 를 자동 선택 (Whisper 는 int8_float16), PyTorch 주소만 바꿔 빌드 |
+
+**데모 서버 실측 (Hugging Face cpu-basic · 2 vCPU)**
+
+| 항목 | 결과 |
+|---|---|
+| 보컬/MR 분리, 2분 MP3 | **110초** (곡 길이의 약 0.9배 · 개발 PC 는 2.4~3.1배) |
+| 자동 자막 small, 25초 한국어 테스트 음성 | 10초 · 5줄 · 언어 자동 감지 `ko` |
+| CI 에서 이미지 빌드 + 실제 AI 점검 | 2분 46초 |
+| Space 빌드 → 실행 | 약 100초 |
 
 ## 아키텍처
 
@@ -164,12 +192,14 @@ flowchart LR
 | 'base' 를 골랐는데 small 로 받아 적음 | StrictMode 에서 상태 요청이 두 번 → 늦게 온 응답이 사용자 선택을 덮어씀 | 사용자가 고른 값은 덮어쓰지 않음 + 서버 상태를 한 곳(`useHealth`)에서 공유 |
 | 자막을 영상에 입히면 깨지거나 □□□ | FFmpeg 필터 안의 `C:\...` 경로 이스케이프 · 글꼴 미지정 | 자막 폴더 안에서 실행해 필터엔 짧은 이름만, 글꼴 파일을 직접 전달. libass 기록으로 "빠진 글자 없음" 테스트 |
 | `start` 를 눌러도 파란 빈 창 + 서버 연결 안 됨 | 콘솔 창 안을 클릭하면 '빠른 편집' 선택 모드로 **창 안의 서버가 멈춤** · `cmd` 창은 아예 실행되지 않는 환경 | 서버를 창 없는 백그라운드 프로세스로 실행하고 출력은 `logs\` 로, 실패 시 로그 끝부분 표시 |
+| CI 가 처음 올리자마자 백엔드 실패 | 테스트가 쓰는 `numpy` 가 AI 패키지에 딸려서만 설치됨 → 내 PC 엔 있어서 몰랐음 (**숨은 의존성**) | CI 와 같은 빈 환경을 PC 에 만들어 재현 → 테스트용 목록에 명시 |
+| 깨진 글자가 섞인 잘못된 요청이 500 | FastAPI 가 '잘못된 요청' 답장에 받은 글자를 그대로 넣다가 UTF-8 변환에서 실패 | 422 처리기에서 깨진 글자만 `?` 로 바꿔 넣음 + 회귀 테스트 |
 | 예상 못 한 서버 오류 시 화면에 "요청 실패 (HTTP 500)" | 기본 응답은 JSON 이 아닌 영어 한 줄 / 백엔드가 꺼지면 프록시가 빈 500 | 한국어 안내 + 오류 번호(로그에 같은 번호), 빈 500 은 "서버에 연결할 수 없음"으로 |
 
 ## 테스트와 품질
 
 ```powershell
-# 백엔드 170개 + 코드 검사
+# 백엔드 188개 + 코드 검사
 cd backend
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt   # 최초 1회
 .\.venv\Scripts\python.exe -m pytest -q
@@ -185,7 +215,8 @@ npm.cmd test
 - **AI 는 가짜 실행기로:** 성공 · 메모리 부족 · 비정상 종료 · 응답 없는 상태에서의 취소 · 한글 인코딩.
 - **자막 입히기는 실제 프레임으로:** 자막이 나오는 동안만 흰 글자가 있는지 세고, libass 기록으로 한글 글꼴 선택을 확인한다.
 - **실패 상황:** 예상 못 한 오류의 응답 형식과 로그, 디스크 부족 시 507, 작업 중 삭제 금지, 서버 시작 정리 범위.
-- **CI:** `.github/workflows/ci.yml` — push/PR 마다 Linux 에서 ruff · pytest · tsc · vitest (AI 패키지 없이, 윈도우 전용 글꼴 검사는 자동 건너뜀).
+- **데모 모드:** 방문자 A/B 가 서로의 파일·작업을 보기·열기·지우기·취소 못 함, 제한별 413/429, 서버가 켜진 채로 자동 삭제가 도는지.
+- **CI:** `.github/workflows/ci.yml` — push/PR 마다 Linux 에서 ruff · pytest · tsc · vitest (AI 패키지 없이), 이어서 **Docker 이미지 빌드 + 컨테이너 안에서 실제 AI 점검**.
 
 ## 설계 원칙
 
@@ -210,21 +241,24 @@ backend/app/
     separator/    Demucs 조종기 + 실행기(별도 프로세스) + 조각 처리
     transcriber/  Whisper 조종기 + 실행기(별도 프로세스)
     runner_client.py · runner_utils.py   실행기 공통 부품 (JSON 통신 · 취소 · 메모리 측정)
-  jobs/         작업 대기열 (작업자 1명 · 취소 · 재시작 시 '중단됨' 표시)
-backend/tests/  pytest 170개 (+ fakes/ 가짜 실행기)
-backend/tools/  실측 도구: bench_separation.py · bench_transcription.py
+  jobs/         작업 대기열 (작업자 1명 · 취소 · 재시작 시 '중단됨' 표시 · 데모: 방문자별 창구)
+  core/         설정 · 로그 · 데모 모드 (visitor.py 번호표 · demo_limits.py 제한)
+  web.py        배포용: 빌드한 화면을 같은 주소로 제공
+backend/tests/  pytest 188개 (+ fakes/ 가짜 실행기)
+backend/tools/  실측 도구 bench_*.py · prefetch_models.py (이미지에 모델 넣기) · smoke_test.py (배포 점검)
 scripts/        설치 · 실행 · 종료 (start.cmd / stop.cmd 는 더블클릭용)
+Dockerfile      데모 서버 이미지 · deploy/huggingface/ Space 소개 카드
 ```
 
 ## 한계와 다음 계획
 
-- **한계:** 노래 받아쓰기는 늘어지는 발음·반복 후렴에서 여전히 틀린다 (편집기로 보완). CPU 전용이라 분리는 곡 길이의 2~3배가 걸린다. Windows 기준으로 만들었다 (스크립트·글꼴 경로).
+- **한계:** 노래 받아쓰기는 늘어지는 발음·반복 후렴에서 여전히 틀린다 (편집기로 보완). CPU 전용이라 분리는 곡 길이의 2~3배가 걸린다(데모 서버는 약 0.9배). 실행 스크립트는 Windows 용이고, 서버 배포는 Docker(Linux)로 한다.
 - **Phase 2:** 무음 구간 자동 컷, 잡음 제거.
-- **Phase 3:** 멀티트랙 타임라인, GPU 가속과 CPU 대체 경로, Electron/Tauri 설치 파일 (모델은 따로 내려받기).
+- **Phase 3:** 멀티트랙 타임라인, GPU 서버로 데모 이전(장치 자동 선택은 준비됨), Electron/Tauri 설치 파일 (모델은 따로 내려받기).
 
 ## ⚠️ 라이선스 메모
 
 - Demucs **코드**는 MIT. 사전학습 **가중치**는 연구용 데이터셋으로 학습되어, 유료 판매 전 상업 이용이 가능한 모델로 교체를 검토해야 한다.
 - faster-whisper 코드와 Whisper 모델 가중치는 MIT (상업 이용 가능).
-- 자막 글꼴 '맑은 고딕'은 윈도우 기본 글꼴 → 배포용 결과물에는 나눔고딕 · Noto Sans KR(OFL) 같은 자유 글꼴로 교체 검토.
+- 자막 글꼴: PC 에서는 윈도우 기본 '맑은 고딕', 데모 서버(Docker)에서는 자유 글꼴 **나눔고딕**(OFL)을 쓴다.
 - FFmpeg full build 는 GPL 구성 요소를 포함 → 배포 시 LGPL 빌드 또는 대체 엔진 검토.
